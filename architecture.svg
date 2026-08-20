@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
+  <title id="title">stock-master-bot 生产级系统架构</title>
+  <desc id="desc">展示数据源、接入标准化、规则检测、事件总线、AI 分析、持久化、服务交付以及安全和可观测性的分层架构。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#eef6f8"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#12365a"/>
+      <stop offset="1" stop-color="#087f8c"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#17324d" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2a6478"/>
+    </marker>
+    <marker id="arrowFast" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#e06c3b"/>
+    </marker>
+    <style>
+      .title { font: 700 28px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #fff; }
+      .subtitle { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #d9f2f4; }
+      .laneTitle { font: 700 16px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #153d5a; }
+      .boxTitle { font: 700 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #123650; }
+      .item { font: 400 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #35546b; }
+      .small { font: 500 12px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #49677c; }
+      .pill { font: 700 12px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #fff; }
+      .flow { fill: none; stroke: #2a6478; stroke-width: 2.2; marker-end: url(#arrow); }
+      .flowFast { fill: none; stroke: #e06c3b; stroke-width: 3; marker-end: url(#arrowFast); }
+      .flowDash { fill: none; stroke: #56849a; stroke-width: 1.8; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1080" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1600" height="92" fill="url(#header)"/>
+  <text x="52" y="42" class="title">stock-master-bot · 生产级事件驱动智能分析架构</text>
+  <text x="52" y="68" class="subtitle">确定性规则负责“发现事实”，AI 负责“解释事实”；实时预警与智能报告分离，所有结论可追溯</text>
+  <rect x="1325" y="28" width="210" height="36" rx="18" fill="#ffffff" fill-opacity="0.14" stroke="#bfe8ea"/>
+  <text x="1430" y="51" text-anchor="middle" class="pill">MVP → 可水平扩展</text>
+
+  <!-- 主处理区域 -->
+  <rect x="35" y="122" width="1270" height="682" rx="18" fill="#fff" stroke="#ccdae3" filter="url(#shadow)"/>
+  <text x="59" y="154" class="laneTitle">核心事件处理与分析链路</text>
+
+  <!-- 数据源 -->
+  <g transform="translate(58,184)">
+    <rect width="190" height="218" rx="14" fill="#edf5ff" stroke="#8bb4d8"/>
+    <rect width="190" height="42" rx="14" fill="#d9eaff"/>
+    <rect y="28" width="190" height="14" fill="#d9eaff"/>
+    <text x="95" y="27" text-anchor="middle" class="boxTitle">① 数据源层</text>
+    <text x="20" y="70" class="item">• 实时行情 WebSocket</text>
+    <text x="20" y="101" class="item">• 公司公告 / 财报</text>
+    <text x="20" y="132" class="item">• 新闻与授权资讯</text>
+    <text x="20" y="163" class="item">• 证券基础数据</text>
+    <rect x="18" y="181" width="154" height="23" rx="11" fill="#fff" stroke="#b6cde3"/>
+    <text x="95" y="197" text-anchor="middle" class="small">供应商 SLA / 授权</text>
+  </g>
+
+  <!-- 接入 -->
+  <g transform="translate(284,184)">
+    <rect width="190" height="218" rx="14" fill="#eefaf9" stroke="#76bcb5"/>
+    <rect width="190" height="42" rx="14" fill="#d7f1ee"/>
+    <rect y="28" width="190" height="14" fill="#d7f1ee"/>
+    <text x="95" y="27" text-anchor="middle" class="boxTitle">② 接入与标准化</text>
+    <text x="20" y="70" class="item">• Source Adapters</text>
+    <text x="20" y="101" class="item">• Schema 强校验</text>
+    <text x="20" y="132" class="item">• 去重 / 时间对齐</text>
+    <text x="20" y="163" class="item">• 代码映射 / 复权</text>
+    <rect x="18" y="181" width="154" height="23" rx="11" fill="#fff" stroke="#acd7d2"/>
+    <text x="95" y="197" text-anchor="middle" class="small">原始数据只读留档</text>
+  </g>
+
+  <!-- 规则 -->
+  <g transform="translate(510,184)">
+    <rect width="206" height="218" rx="14" fill="#fff7ea" stroke="#dfb56f"/>
+    <rect width="206" height="42" rx="14" fill="#ffebc9"/>
+    <rect y="28" width="206" height="14" fill="#ffebc9"/>
+    <text x="103" y="27" text-anchor="middle" class="boxTitle">③ 确定性规则引擎</text>
+    <text x="20" y="70" class="item">• 指标与窗口计算</text>
+    <text x="20" y="101" class="item">• 异动阈值检测</text>
+    <text x="20" y="132" class="item">• 事件聚合 / 抑制</text>
+    <text x="20" y="163" class="item">• 业务合规检查</text>
+    <rect x="18" y="181" width="170" height="23" rx="11" fill="#fff" stroke="#e7c88f"/>
+    <text x="103" y="197" text-anchor="middle" class="small">纯 Python · 可回测</text>
+  </g>
+
+  <!-- 消息 -->
+  <g transform="translate(752,184)">
+    <rect width="202" height="218" rx="14" fill="#f2f0fc" stroke="#a99bd7"/>
+    <rect width="202" height="42" rx="14" fill="#e5e0f7"/>
+    <rect y="28" width="202" height="14" fill="#e5e0f7"/>
+    <text x="101" y="27" text-anchor="middle" class="boxTitle">④ 事件总线与调度</text>
+    <text x="20" y="70" class="item">• Redis Streams / MQ</text>
+    <text x="20" y="101" class="item">• Celery Workers</text>
+    <text x="20" y="132" class="item">• Scheduler / Retry</text>
+    <text x="20" y="163" class="item">• 幂等键 / 分布式锁</text>
+    <rect x="18" y="181" width="166" height="23" rx="11" fill="#fff" stroke="#c6bce5"/>
+    <text x="101" y="197" text-anchor="middle" class="small">死信队列 · 背压</text>
+  </g>
+
+  <!-- 服务交付 -->
+  <g transform="translate(990,184)">
+    <rect width="280" height="218" rx="14" fill="#eff7fb" stroke="#80aec4"/>
+    <rect width="280" height="42" rx="14" fill="#dceef5"/>
+    <rect y="28" width="280" height="14" fill="#dceef5"/>
+    <text x="140" y="27" text-anchor="middle" class="boxTitle">⑤ 服务与交付</text>
+    <text x="22" y="70" class="item">• FastAPI 查询 / 订阅 API</text>
+    <text x="22" y="101" class="item">• Web 控制台 / 自选股</text>
+    <text x="22" y="132" class="item">• 即时预警 / 消息通知</text>
+    <text x="22" y="163" class="item">• 日报 / 周报 / 事件报告</text>
+    <rect x="20" y="181" width="240" height="23" rx="11" fill="#fff" stroke="#b5d1de"/>
+    <text x="140" y="197" text-anchor="middle" class="small">鉴权 · 限流 · 用户偏好</text>
+  </g>
+
+  <!-- 快链路箭头 -->
+  <path d="M248 292 H278" class="flowFast"/>
+  <path d="M474 292 H504" class="flowFast"/>
+  <path d="M716 292 H746" class="flowFast"/>
+  <path d="M954 292 H984" class="flowFast"/>
+  <rect x="487" y="422" width="326" height="28" rx="14" fill="#fbe6db"/>
+  <text x="650" y="441" text-anchor="middle" class="small" style="fill:#a84324;font-weight:700">快速链路：行情 → 规则 → 事件 → 秒/分钟级预警</text>
+
+  <!-- 慢链路 AI -->
+  <g transform="translate(284,490)">
+    <rect width="670" height="244" rx="15" fill="#f2faf7" stroke="#63a992" stroke-width="1.5"/>
+    <text x="23" y="32" class="laneTitle">⑥ AI 智能分析层（异步慢链路，不阻塞实时预警）</text>
+
+    <rect x="22" y="55" width="142" height="154" rx="11" fill="#fff" stroke="#9dc9bb"/>
+    <text x="93" y="83" text-anchor="middle" class="boxTitle">Agno Workflow</text>
+    <text x="37" y="112" class="item">事件上下文</text>
+    <text x="37" y="139" class="item">步骤状态机</text>
+    <text x="37" y="166" class="item">模型路由</text>
+    <text x="37" y="193" class="item">超时与预算</text>
+
+    <rect x="188" y="55" width="142" height="154" rx="11" fill="#fff" stroke="#9dc9bb"/>
+    <text x="259" y="83" text-anchor="middle" class="boxTitle">RAG 证据检索</text>
+    <text x="203" y="112" class="item">公告 / 新闻</text>
+    <text x="203" y="139" class="item">历史相似事件</text>
+    <text x="203" y="166" class="item">来源与时间戳</text>
+    <text x="203" y="193" class="item">租户级过滤</text>
+
+    <rect x="354" y="55" width="142" height="154" rx="11" fill="#fff" stroke="#9dc9bb"/>
+    <text x="425" y="83" text-anchor="middle" class="boxTitle">LLM 分析</text>
+    <text x="369" y="112" class="item">摘要与事件归因</text>
+    <text x="369" y="139" class="item">证据关联</text>
+    <text x="369" y="166" class="item">不确定性说明</text>
+    <text x="369" y="193" class="item">禁止数值计算</text>
+
+    <rect x="520" y="55" width="128" height="154" rx="11" fill="#fff" stroke="#9dc9bb"/>
+    <text x="584" y="83" text-anchor="middle" class="boxTitle">Guardrails</text>
+    <text x="535" y="112" class="item">JSON Schema</text>
+    <text x="535" y="139" class="item">事实引用检查</text>
+    <text x="535" y="166" class="item">注入防护</text>
+    <text x="535" y="193" class="item">合规措辞</text>
+
+    <path d="M164 132 H182" class="flow"/>
+    <path d="M330 132 H348" class="flow"/>
+    <path d="M496 132 H514" class="flow"/>
+  </g>
+
+  <path d="M853 402 V468 H340 V484" class="flow"/>
+  <path d="M954 612 H1120 V408" class="flow"/>
+  <rect x="990" y="582" width="223" height="28" rx="14" fill="#dff2eb"/>
+  <text x="1101" y="601" text-anchor="middle" class="small" style="fill:#28735d;font-weight:700">慢速链路：事件 → AI → 报告</text>
+
+  <!-- 横切能力 -->
+  <g transform="translate(1332,122)">
+    <rect width="233" height="682" rx="18" fill="#173b59" filter="url(#shadow)"/>
+    <text x="116" y="36" text-anchor="middle" class="laneTitle" style="fill:#fff">横切能力</text>
+
+    <rect x="20" y="62" width="193" height="246" rx="13" fill="#fff" fill-opacity="0.08" stroke="#78b7c5"/>
+    <text x="116" y="92" text-anchor="middle" class="boxTitle" style="fill:#aee8e5">安全与治理</text>
+    <text x="38" y="127" class="item" style="fill:#e4f2f6">• OIDC / RBAC</text>
+    <text x="38" y="160" class="item" style="fill:#e4f2f6">• 租户与数据隔离</text>
+    <text x="38" y="193" class="item" style="fill:#e4f2f6">• Secret Manager</text>
+    <text x="38" y="226" class="item" style="fill:#e4f2f6">• SSRF / 注入防护</text>
+    <text x="38" y="259" class="item" style="fill:#e4f2f6">• 数据授权与留存</text>
+    <text x="38" y="292" class="item" style="fill:#e4f2f6">• 全链路审计</text>
+
+    <rect x="20" y="334" width="193" height="306" rx="13" fill="#fff" fill-opacity="0.08" stroke="#78b7c5"/>
+    <text x="116" y="364" text-anchor="middle" class="boxTitle" style="fill:#aee8e5">可观测性与韧性</text>
+    <text x="38" y="399" class="item" style="fill:#e4f2f6">• Metrics / Logs</text>
+    <text x="38" y="432" class="item" style="fill:#e4f2f6">• Trace / Correlation ID</text>
+    <text x="38" y="465" class="item" style="fill:#e4f2f6">• 数据延迟与质量告警</text>
+    <text x="38" y="498" class="item" style="fill:#e4f2f6">• LLM 成本与准确率</text>
+    <text x="38" y="531" class="item" style="fill:#e4f2f6">• 熔断 / 限流 / 降级</text>
+    <text x="38" y="564" class="item" style="fill:#e4f2f6">• Checkpoint / 重放</text>
+    <text x="38" y="597" class="item" style="fill:#e4f2f6">• SLO / 值班告警</text>
+    <rect x="36" y="612" width="160" height="20" rx="10" fill="#2c8d91"/>
+    <text x="116" y="626" text-anchor="middle" class="pill" style="font-size:11px">OpenTelemetry</text>
+  </g>
+
+  <!-- 数据持久化层 -->
+  <rect x="35" y="836" width="1530" height="201" rx="18" fill="#fff" stroke="#ccdae3" filter="url(#shadow)"/>
+  <text x="59" y="870" class="laneTitle">⑦ 数据与状态持久化层</text>
+
+  <g transform="translate(60,895)">
+    <rect width="252" height="110" rx="12" fill="#eef5fb" stroke="#91b3cb"/>
+    <text x="126" y="30" text-anchor="middle" class="boxTitle">PostgreSQL · 事实源</text>
+    <text x="22" y="59" class="item">任务状态 / 事件 / 用户配置</text>
+    <text x="22" y="84" class="item">唯一约束 / Checkpoint</text>
+  </g>
+  <g transform="translate(336,895)">
+    <rect width="252" height="110" rx="12" fill="#eef5fb" stroke="#91b3cb"/>
+    <text x="126" y="30" text-anchor="middle" class="boxTitle">对象存储</text>
+    <text x="22" y="59" class="item">原始行情 / 新闻 / 公告快照</text>
+    <text x="22" y="84" class="item">版本化报告与证据</text>
+  </g>
+  <g transform="translate(612,895)">
+    <rect width="252" height="110" rx="12" fill="#eef5fb" stroke="#91b3cb"/>
+    <text x="126" y="30" text-anchor="middle" class="boxTitle">Vector DB（按需）</text>
+    <text x="22" y="59" class="item">公告 / 新闻语义检索</text>
+    <text x="22" y="84" class="item">元数据权限过滤</text>
+  </g>
+  <g transform="translate(888,895)">
+    <rect width="304" height="110" rx="12" fill="#fff4ee" stroke="#d6a083"/>
+    <text x="152" y="30" text-anchor="middle" class="boxTitle">Transactional Outbox</text>
+    <text x="22" y="59" class="item">业务提交与消息发布保持一致</text>
+    <text x="22" y="84" class="item">通知幂等 / 重试 / 死信</text>
+  </g>
+  <g transform="translate(1216,895)">
+    <rect width="320" height="110" rx="12" fill="#f4f1fb" stroke="#aa9bc8"/>
+    <text x="160" y="30" text-anchor="middle" class="boxTitle">不可变审计日志</text>
+    <text x="22" y="59" class="item">模型 / Prompt / 输入 / 输出版本</text>
+    <text x="22" y="84" class="item">来源引用 / 操作人 / 时间戳</text>
+  </g>
+
+  <!-- 数据层连接 -->
+  <path d="M380 734 V815 H186 V889" class="flowDash"/>
+  <path d="M620 734 V815 H738 V889" class="flowDash"/>
+  <path d="M850 734 V815 H1040 V889" class="flowDash"/>
+  <path d="M1130 402 V815 H1376 V889" class="flowDash"/>
+
+  <text x="800" y="1064" text-anchor="middle" class="small">设计原则：LLM 不进入实时关键路径 · 计算与触发完全确定性 · 事件至少一次投递并由业务幂等兜底 · 所有分析保留证据与版本</text>
+</svg>
