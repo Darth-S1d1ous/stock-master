@@ -1,8 +1,8 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from uuid import UUID
 
-from annotated_types import LowerCase
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 class PriceAdjustment(StrEnum):
@@ -17,6 +17,10 @@ class DailyBar(BaseModel):
         str_strip_whitespace=True,
     )
 
+    observation_id: UUID | None = Field(
+        default=None,
+        description="Stable identifier assigned after persistence",
+    )
     symbol: str = Field(
         min_length=1,
         max_length=15,

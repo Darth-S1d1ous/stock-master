@@ -122,6 +122,7 @@ class StockDataRepository:
 
         return [
             DailyBar(
+                observation_id=row.observation_id,
                 symbol=row.symbol,
                 trading_date=row.trading_date,
                 open=row.open,
@@ -157,6 +158,7 @@ class StockDataRepository:
             return None
 
         return CompanyFundamentals(
+            observation_id=row.observation_id,
             symbol=row.symbol,
             latest_quarter=row.latest_quarter,
             pe_ratio=row.pe_ratio,

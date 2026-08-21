@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
@@ -13,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -66,6 +67,12 @@ class DailyBarTable(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    observation_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+        unique=True,
+        default=uuid4,
+    )
     # python type: str; postgresql type: symbol VARCHAR(15) NOT NULL
     symbol: Mapped[str] = mapped_column(String(15), nullable=False)
     trading_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -106,6 +113,12 @@ class FundamentalSnapshotTable(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    observation_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        nullable=False,
+        unique=True,
+        default=uuid4,
+    )
     symbol: Mapped[str] = mapped_column(String(15), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     latest_quarter: Mapped[date | None] = mapped_column(Date, nullable=True)

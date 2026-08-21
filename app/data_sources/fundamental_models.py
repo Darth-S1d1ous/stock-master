@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -12,6 +13,10 @@ class CompanyFundamentals(BaseModel):
         str_strip_whitespace=True,
     )
 
+    observation_id: UUID | None = Field(
+        default=None,
+        description="Stable identifier assigned after persistence",
+    )
     symbol: str = Field(
         min_length=1,
         max_length=15,

@@ -168,6 +168,7 @@ class EventEvidence(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     event_id: UUID
+    user_id: UUID
 
     evidence_type: EvidenceType
     source: str = Field(
