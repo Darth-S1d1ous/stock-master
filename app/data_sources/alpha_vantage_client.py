@@ -31,7 +31,7 @@ class AlphaVantageClient:
     )-> None:
 
         self._settings = settings or get_settings()
-        if not self._settings.alpha_vantage_api_key:
+        if not self._settings.alpha_vantage_api_key.get_secret_value():
             raise ValueError("缺少 ALPHA_VANTAGE_API_KEY")
         self._validate_base_url(self._settings.alpha_vantage_base_url)
 
@@ -86,7 +86,7 @@ class AlphaVantageClient:
             "symbol": normalized_symbol,
             "outputsize": output_size,
             "datatype": "json",
-            "apikey": self._settings.alpha_vantage_api_key,
+            "apikey": self._settings.alpha_vantage_api_key.get_secret_value(),
         }
 
         response = await self._get_with_retry(params)
@@ -110,7 +110,7 @@ class AlphaVantageClient:
         params = {
             "function": "OVERVIEW",
             "symbol": normalized_symbol,
-            "apikey": self._settings.alpha_vantage_api_key,
+            "apikey": self._settings.alpha_vantage_api_key.get_secret_value(),
         }
 
         response = await self._get_with_retry(params)
@@ -144,16 +144,22 @@ class AlphaVantageClient:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await client.get(self._settings.alpha_vantage_base_url, params=params)
+                response = await client.get(
+                self._settings.alpha_vantage_base_url,
+                params=params,
+                follow_redirects=False,
+            )
             except (
                 httpx.ConnectError,
                 httpx.ConnectTimeout,
                 httpx.ReadTimeout,
                 httpx.WriteTimeout,
                 httpx.RemoteProtocolError,
-            ) as exc:
+            ):
                 if attempt == max_attempts:
-                    raise AlphaVantageRequestError(f"request failed after {max_attempts} attempts") from exc
+                    raise AlphaVantageRequestError(
+                        f"request failed after {max_attempts} attempts"
+                    ) from None
 
                 await asyncio.sleep(self._retry_delay(attempt))
                 continue
@@ -170,10 +176,14 @@ class AlphaVantageClient:
             
             try:
                 response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise AlphaVantageRequestError(f"Alpha Vantage request failed") from exc
+            except httpx.HTTPStatusError:
+                raise AlphaVantageRequestError(
+                    f"Alpha Vantage request failed with HTTP {response.status_code}"
+                ) from None
 
             return response
+
+        raise AlphaVantageRequestError("Alpha Vantage request exhausted retries")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
@@ -192,17 +202,15 @@ class AlphaVantageClient:
     def _raise_for_api_error(payload: dict[str, Any]) -> None:
         error_message = payload.get("Error Message")
         if isinstance(error_message, str):
-            raise AlphaVantageResponseError(
-                f"Alpha Vantage rejected request: {error_message}"
-            )
+            raise AlphaVantageResponseError("Alpha Vantage rejected request")
 
         note = payload.get("Note")
         if isinstance(note, str):
-            raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {note}")
+            raise AlphaVantageRateLimitError("Alpha Vantage rate limit exceeded")
 
         information = payload.get("Information")
         if isinstance(information, str):
-            raise AlphaVantageResponseError(f"Alpha Vantage API error: {information}")
+            raise AlphaVantageResponseError("Alpha Vantage API error")
 
     @staticmethod
     def _validate_base_url(base_url: str) -> None:

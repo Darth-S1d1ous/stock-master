@@ -1,5 +1,7 @@
 from types import TracebackType
 
+import httpx
+
 from app.data_sources.alpha_vantage_client import AlphaVantageClient
 from app.data_sources.base import OutputSize
 from app.data_sources.alpha_vantage_fundamental_parser import parse_alpha_vantage_company_overview
@@ -12,8 +14,15 @@ from app.data_sources.settings import DataSourceSettings
 class AlphaVantageDataSource:
     """ Provides access to Alpha Vantage data source """
 
-    def __init__(self, settings: DataSourceSettings | None = None) -> None:
-        self._client = AlphaVantageClient(settings=settings)
+    def __init__(
+        self,
+        settings: DataSourceSettings | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._client = AlphaVantageClient(
+            settings=settings,
+            http_client=http_client,
+        )
     
     """ wait for client to be initialized first """
     async def __aenter__(self) -> "AlphaVantageDataSource":

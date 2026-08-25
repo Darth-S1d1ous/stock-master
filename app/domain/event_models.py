@@ -10,9 +10,9 @@ from app.domain.thesis_models import ComparisonOperator, MetricCode
 class EventSeverity(StrEnum):
     """Severity of an event."""
 
-    INFO = "INFO"
-    WARNING = "WARNING"
-    CRITICAL = "CRITICAL"
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
 
 class EventStatus(StrEnum):
     OPEN = "open"
@@ -45,7 +45,7 @@ class RuleEvaluation(BaseModel):
     thesis_id: UUID
     condition_id: UUID
 
-    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Z][A-Z0-9.-]*$")
+    symbol: str = Field(min_length=1, max_length=15, pattern=r"^[A-Z][A-Z0-9.-]*$")
 
     metric: MetricCode
     operator: ComparisonOperator
@@ -63,8 +63,8 @@ class RuleEvaluation(BaseModel):
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
     observation_ids: tuple[UUID, ...] = Field(
-        default_factory=tuple,
-        description="The normalized data record IDs for audit and event replay"
+        min_length=1,
+        description="The normalized data record IDs for audit and event replay",
     )
 
     @field_validator("symbol", mode="before")
@@ -129,9 +129,9 @@ class DomainEvent(BaseModel):
     condition_id: UUID
     evaluation_id: UUID
 
-    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Z][A-Z0-9.-]*$")
+    symbol: str = Field(min_length=1, max_length=15, pattern=r"^[A-Z][A-Z0-9.-]*$")
 
-    event_type: str = Field(min_length=1, max_length=200, pattern=r"^[a-z][a-z0-9_]*$")
+    event_type: str = Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_]*$")
     severity: EventSeverity
     status: EventStatus = EventStatus.OPEN
 

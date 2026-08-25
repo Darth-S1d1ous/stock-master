@@ -10,6 +10,7 @@ to a new RuleEvaluation
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 
 from app.domain.event_models import RuleEvaluation
 from app.domain.metric_calculator import MetricResult
@@ -74,7 +75,11 @@ def evaluate_condition(
         observation_ids=metric_result.observation_ids,
     )
 
-def compare_values(observed_value, threshold, operator: ComparisonOperator) -> bool:
+def compare_values(
+    observed_value: Decimal,
+    threshold: Decimal,
+    operator: ComparisonOperator,
+) -> bool:
 
     match operator:
         case ComparisonOperator.GREATER_THAN:
@@ -85,8 +90,6 @@ def compare_values(observed_value, threshold, operator: ComparisonOperator) -> b
             return observed_value < threshold
         case ComparisonOperator.LESS_THAN_OR_EQUAL:
             return observed_value <= threshold
-
-    raise RuleEvaluationError(f"Unknown operator: {operator}")
 
 def _validate_relationships(
     thesis: InvestmentThesis,
@@ -151,7 +154,9 @@ def _validate_and_order_history(
         if evaluation.rule_version != condition.version:
             raise RuleEvaluationError("evaluation is not associated with condition version")
         if evaluation.data_as_of >= current_data_as_of:
-            raise RuleEvaluationError("evaluation is not associated with condition version")
+            raise RuleEvaluationError(
+                "prior evaluation must precede the current data date"
+            )
         if evaluation.data_as_of in seen_dates:
             raise RuleEvaluationError("Prior evaluations must contain at most one result per date")
 

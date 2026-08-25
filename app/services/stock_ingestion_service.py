@@ -38,8 +38,12 @@ class StockIngestionService:
             symbol=normalized_symbol,
             output_size=output_size,
         )
+        if not bars:
+            raise ValueError("Data source returned no daily bars")
 
-        fundamentals = (await self._data_source.get_company_fundamentals(symbol=normalized_symbol))
+        fundamentals = await self._data_source.get_company_fundamentals(
+            symbol=normalized_symbol,
+        )
 
         self._validate_symbols(
             requested_symbol=normalized_symbol,

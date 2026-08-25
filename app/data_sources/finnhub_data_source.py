@@ -41,16 +41,14 @@ class FinnhubDataSource:
         self._owned_http_client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "FinnhubDataSource":
-        if not self._settings.finnhub_api_key:
+        if not self._settings.finnhub_api_key.get_secret_value():
             raise ValueError("缺少 FINNHUB_API_KEY")
         if self._provided_http_client is None:
             self._owned_http_client = httpx.AsyncClient(
                 base_url=self._settings.finnhub_base_url,
                 timeout=httpx.Timeout(self._settings.finnhub_timeout_seconds),
                 follow_redirects=False,
-                headers={
-                    "X-Finnhub-Token": self._settings.finnhub_api_key,
-                },
+
             )
         return self
 
@@ -70,6 +68,7 @@ class FinnhubDataSource:
         output_size: OutputSize = "compact",
     ) -> list[DailyBar]:
         normalized_symbol = self._normalize_symbol(symbol)
+        self._validate_output_size(output_size)
         now = datetime.now(UTC)
         start = now - (
             timedelta(days=180)
@@ -105,19 +104,28 @@ class FinnhubDataSource:
     ) -> Mapping[str, object]:
         client = self._get_http_client()
         max_attempts = self._settings.finnhub_max_retries + 1
+        url = f"{self._settings.finnhub_base_url.rstrip('/')}{path}"
+        headers = {
+            "X-Finnhub-Token": self._settings.finnhub_api_key.get_secret_value(),
+        }
 
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await client.get(path, params=params)
+                response = await client.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    follow_redirects=False,
+                )
             except (
                 httpx.ConnectError,
                 httpx.ConnectTimeout,
                 httpx.ReadTimeout,
                 httpx.WriteTimeout,
                 httpx.RemoteProtocolError,
-            ) as exc:
+            ):
                 if attempt == max_attempts:
-                    raise FinnhubError("Finnhub 网络请求失败") from exc
+                    raise FinnhubError("Finnhub 网络请求失败") from None
                 await asyncio.sleep(min(2 ** (attempt - 1), 8))
                 continue
 
@@ -129,16 +137,16 @@ class FinnhubDataSource:
             try:
                 response.raise_for_status()
                 payload = response.json()
-            except (httpx.HTTPStatusError, ValueError) as exc:
+            except (httpx.HTTPStatusError, ValueError):
                 raise FinnhubError(
                     f"Finnhub 返回无效响应，HTTP {response.status_code}"
-                ) from exc
+                ) from None
 
             if not isinstance(payload, Mapping):
                 raise FinnhubError("Finnhub JSON 顶层必须是对象")
             error = payload.get("error")
             if isinstance(error, str) and error:
-                raise FinnhubError(f"Finnhub 拒绝请求：{error}")
+                raise FinnhubError("Finnhub 拒绝请求")
             return payload
 
         raise FinnhubError("Finnhub 请求未获得响应")
@@ -160,7 +168,7 @@ class FinnhubDataSource:
         if status == "no_data":
             raise FinnhubError(f"Finnhub 没有返回日线数据：{symbol}")
         if status != "ok":
-            raise FinnhubError(f"Finnhub 日线状态异常：{status!r}")
+            raise FinnhubError("Finnhub 日线状态异常")
 
         opens = FinnhubDataSource._require_sequence(payload, "o")
         highs = FinnhubDataSource._require_sequence(payload, "h")
@@ -293,6 +301,11 @@ class FinnhubDataSource:
         if parsed < 0 or parsed != parsed.to_integral_value():
             raise ValueError(f"无效成交量：{value!r}")
         return int(parsed)
+
+    @staticmethod
+    def _validate_output_size(output_size: str) -> None:
+        if output_size not in ("compact", "full"):
+            raise ValueError("output_size 必须是 'compact' 或 'full'")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:

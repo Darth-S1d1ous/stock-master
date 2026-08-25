@@ -4,13 +4,11 @@ from uuid import UUID
 
 from sqlalchemy import (
     ARRAY,
-    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKeyConstraint,
-    Identity,
     Index,
     Integer,
     Numeric,
@@ -114,6 +112,12 @@ class ThesisConditionTable(Base):
             "id",
             "user_id",
             name="thesis_condition_owner_identity",
+        ),
+        UniqueConstraint(
+            "id",
+            "thesis_id",
+            "user_id",
+            name="thesis_condition_chain_identity",
         ),
         ForeignKeyConstraint(
             ["thesis_id", "user_id"],
@@ -235,6 +239,19 @@ class RuleEvaluationTable(Base):
             "user_id",
             name="rule_evaluation_owner_identity",
         ),
+        UniqueConstraint(
+            "id",
+            "condition_id",
+            "thesis_id",
+            "user_id",
+            name="rule_evaluation_chain_identity",
+        ),
+        UniqueConstraint(
+            "condition_id",
+            "rule_version",
+            "data_as_of",
+            name="rule_evaluation_period_identity",
+        ),
         ForeignKeyConstraint(
             ["thesis_id", "user_id"],
             [
@@ -245,12 +262,13 @@ class RuleEvaluationTable(Base):
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
-            ["condition_id", "user_id"],
+            ["condition_id", "thesis_id", "user_id"],
             [
                 "thesis_conditions.id",
+                "thesis_conditions.thesis_id",
                 "thesis_conditions.user_id",
             ],
-            name="rule_evaluation_condition_owner",
+            name="rule_evaluation_condition_chain",
             ondelete="CASCADE",
         ),
         Index(
@@ -285,6 +303,14 @@ class RuleEvaluationTable(Base):
         CheckConstraint(
             "rule_version >= 1",
             name="rule_version_positive",
+        ),
+        CheckConstraint(
+            "cardinality(observation_ids) > 0",
+            name="observation_ids_not_empty",
+        ),
+        CheckConstraint(
+            "matched = (consecutive_periods_matched >= consecutive_periods_required)",
+            name="matched_state_consistent",
         ),
     )
 
@@ -376,30 +402,14 @@ class DomainEventTable(Base):
             name="domain_event_evaluation_identity",
         ),
         ForeignKeyConstraint(
-            ["thesis_id", "user_id"],
-            [
-                "investment_theses.id",
-                "investment_theses.user_id",
-            ],
-            name="domain_event_thesis_owner",
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["condition_id", "user_id"],
-            [
-                "thesis_conditions.id",
-                "thesis_conditions.user_id",
-            ],
-            name="domain_event_condition_owner",
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["evaluation_id", "user_id"],
+            ["evaluation_id", "condition_id", "thesis_id", "user_id"],
             [
                 "rule_evaluations.id",
+                "rule_evaluations.condition_id",
+                "rule_evaluations.thesis_id",
                 "rule_evaluations.user_id",
             ],
-            name="domain_event_evaluation_owner",
+            name="domain_event_evaluation_chain",
             ondelete="CASCADE",
         ),
         Index(
@@ -519,6 +529,11 @@ class EventEvidenceTable(Base):
             "published_at IS NULL "
             "OR published_at <= observed_at",
             name="evidence_timestamp_order_valid",
+        ),
+        CheckConstraint(
+            "evidence_type = 'source_document' "
+            "OR (metric IS NOT NULL AND observed_value IS NOT NULL)",
+            name="numeric_evidence_complete",
         ),
     )
 

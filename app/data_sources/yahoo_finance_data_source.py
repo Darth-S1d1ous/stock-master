@@ -40,6 +40,7 @@ class YahooFinanceDataSource:
         output_size: OutputSize = "compact",
     ) -> list[DailyBar]:
         normalized_symbol = self._normalize_symbol(symbol)
+        self._validate_output_size(output_size)
         period = "6mo" if output_size == "compact" else "max"
         return await asyncio.to_thread(
             self._get_daily_bars_sync,
@@ -167,6 +168,11 @@ class YahooFinanceDataSource:
             raise YahooFinanceError(
                 f"Yahoo Finance 基本面解析失败：{symbol}"
             ) from exc
+
+    @staticmethod
+    def _validate_output_size(output_size: str) -> None:
+        if output_size not in ("compact", "full"):
+            raise ValueError("output_size 必须是 'compact' 或 'full'")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:

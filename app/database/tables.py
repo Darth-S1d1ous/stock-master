@@ -72,6 +72,7 @@ class DailyBarTable(Base):
         nullable=False,
         unique=True,
         default=uuid4,
+        server_default=func.gen_random_uuid(),
     )
     # python type: str; postgresql type: symbol VARCHAR(15) NOT NULL
     symbol: Mapped[str] = mapped_column(String(15), nullable=False)
@@ -118,6 +119,7 @@ class FundamentalSnapshotTable(Base):
         nullable=False,
         unique=True,
         default=uuid4,
+        server_default=func.gen_random_uuid(),
     )
     symbol: Mapped[str] = mapped_column(String(15), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)

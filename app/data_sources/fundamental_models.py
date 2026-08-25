@@ -17,6 +17,10 @@ class CompanyFundamentals(BaseModel):
         default=None,
         description="Stable identifier assigned after persistence",
     )
+    snapshot_date: date | None = Field(
+        default=None,
+        description="Business date assigned when the snapshot is persisted",
+    )
     symbol: str = Field(
         min_length=1,
         max_length=15,
@@ -46,6 +50,13 @@ class CompanyFundamentals(BaseModel):
         max_length=50,
     )
     received_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
     @field_validator("symbol", mode="before")
     @classmethod

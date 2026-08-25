@@ -181,7 +181,7 @@ def _calculate_current_fundamental(
             return MetricResult(
                 metric=metric,
                 value=value,
-                data_as_of=snapshot.received_at.date(),
+                data_as_of=_fundamental_data_as_of(snapshot),
                 observation_ids=(
                     _require_observation_id(snapshot),
                 ),
@@ -220,7 +220,7 @@ def _calculate_fundamental_change(
     return MetricResult(
         metric=metric,
         value=value,
-        data_as_of=current_snapshot.received_at.date(),
+        data_as_of=_fundamental_data_as_of(current_snapshot),
         observation_ids=(
             _require_observation_id(previous_snapshot),
             _require_observation_id(current_snapshot),
@@ -266,7 +266,10 @@ def _prepare_fundamentals(
 
     ordered = sorted(
         snapshots,
-        key=lambda item: item.received_at,
+        key=lambda item: (
+            _fundamental_data_as_of(item),
+            item.received_at,
+        ),
     )
     series_keys = {
         (item.symbol, item.source)
@@ -276,7 +279,16 @@ def _prepare_fundamentals(
         raise MetricCalculationError(
             "All fundamental snapshots must belong to the same symbol and source series"
         )
+    dates = [_fundamental_data_as_of(item) for item in ordered]
+    if len(dates) != len(set(dates)):
+        raise MetricCalculationError(
+            "Fundamental snapshots must contain one observation per snapshot date"
+        )
     return ordered
+
+
+def _fundamental_data_as_of(snapshot: CompanyFundamentals) -> date:
+    return snapshot.snapshot_date or snapshot.received_at.date()
 
 
 def _percentage_change(

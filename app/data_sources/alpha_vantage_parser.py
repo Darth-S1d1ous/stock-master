@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Final
 
@@ -41,7 +41,7 @@ def parse_alpha_vantage_daily(payload: Mapping[str, object]) -> list[DailyBar]:
         try:
             bar = DailyBar(
                 symbol=symbol,
-                trading_date=trading_date,
+                trading_date=date.fromisoformat(trading_date),
                 open=_parse_decimal(raw_bar, _OPEN_KEY),
                 high=_parse_decimal(raw_bar, _HIGH_KEY),
                 low=_parse_decimal(raw_bar, _LOW_KEY),
@@ -50,9 +50,12 @@ def parse_alpha_vantage_daily(payload: Mapping[str, object]) -> list[DailyBar]:
                 currency="USD",
                 adjustment=PriceAdjustment.RAW,
                 source="alpha_vantage",
+                received_at=received_at,
             )
-        except ValidationError as exc:
-            raise AlphaVantageParseError(f"Invalid bar data: {raw_bar}") from exc
+        except (ValidationError, ValueError):
+            raise AlphaVantageParseError(
+                "Invalid daily bar data in provider response"
+            ) from None
     
         
         bars.append(bar)

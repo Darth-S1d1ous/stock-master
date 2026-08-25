@@ -42,6 +42,13 @@ class DailyBar(BaseModel):
     source: str = Field(min_length=1, max_length=50)
     received_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
     @field_validator("symbol", mode="before")
     @classmethod
     def normalize_symbol(cls, value: object) -> object:

@@ -64,8 +64,10 @@ def parse_alpha_vantage_company_overview(payload: Mapping[str, object]) -> Compa
             source="alpha_vantage",
             received_at=datetime.now(UTC),
         )
-    except ValidationError as exc:
-        raise AlphaVantageFundamentalParseError(f"Invalid company overview data: {payload}") from exc
+    except ValidationError:
+        raise AlphaVantageFundamentalParseError(
+            "Invalid company overview data in provider response"
+        ) from None
 
 def _require_string(payload: Mapping[str, object], key: str) -> str:
     value = payload.get(key)
