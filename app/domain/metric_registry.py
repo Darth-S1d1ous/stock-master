@@ -1,3 +1,7 @@
+"""
+bind each metric to its required data fields and the calculator function, and provide a metric calculator entry
+solves the problem that ThesisMonotoring should not directly maintain a large amount of if/elif branches 
+"""
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -83,3 +87,122 @@ class MetricDefinition:
         result = calculator(bars)
         self._validate_result(result)
         return result
+
+    def calculate_fundamentals(
+        self,
+        snapshots: Sequence[CompanyFundamentals],
+    ) -> MetricResult:
+        """Calculate this metric from persisted fundamental snapshots."""
+
+        if self.input_kind is not MetricInputKind.FUNDAMENTALS:
+            raise MetricRegistryError(
+                f"{self.metric.value} cannot be calculated "
+                "from fundamental snapshots"
+            )
+
+        if len(snapshots) < self.required_observations:
+            raise MetricRegistryError(
+                f"{self.metric.value} requires at least "
+                f"{self.required_observations} fundamental snapshots"
+            )
+
+        calculator = self.fundamental_calculator
+        if calculator is None:
+            raise MetricRegistryError(f"{self.metric.value} has no fundamental calculator")
+
+        result = calculator(snapshots)
+        self._validate_result(result)
+        return result
+
+    def _validate_result(
+        self,
+        result: MetricResult,
+    ) -> None:
+        if result.metric is not self.metric:
+            raise MetricRegistryError(
+                f"Calculator registered for {self.metric.value} "
+                f"returned {result.metric.value}"
+            )
+
+_METRIC_DEFINITIONS = (
+    MetricDefinition(
+        metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
+        input_kind=MetricInputKind.DAILY_BARS,
+        required_observations=2,
+        daily_calculator=calculate_daily_price_change_percent,
+    ),
+    MetricDefinition(
+        metric=MetricCode.VOLUME_RATIO_20D,
+        input_kind=MetricInputKind.DAILY_BARS,
+        required_observations=21,
+        daily_calculator=calculate_volume_ratio_20d,
+    ),
+    MetricDefinition(
+        metric=MetricCode.PE_RATIO,
+        input_kind=MetricInputKind.FUNDAMENTALS,
+        required_observations=1,
+        fundamental_calculator=calculate_pe_ratio,
+    ),
+    MetricDefinition(
+        metric=MetricCode.PE_RATIO_CHANGE_PERCENT,
+        input_kind=MetricInputKind.FUNDAMENTALS,
+        required_observations=2,
+        fundamental_calculator=calculate_pe_ratio_change_percent,
+    ),
+    MetricDefinition(
+        metric=MetricCode.PRICE_TO_BOOK_RATIO,
+        input_kind=MetricInputKind.FUNDAMENTALS,
+        required_observations=1,
+        fundamental_calculator=calculate_price_to_book_ratio,
+    ),
+    MetricDefinition(
+        metric=MetricCode.PRICE_TO_BOOK_CHANGE_PERCENT,
+        input_kind=MetricInputKind.FUNDAMENTALS,
+        required_observations=2,
+        fundamental_calculator=(
+            calculate_price_to_book_change_percent
+        ),
+    ),
+    MetricDefinition(
+        metric=MetricCode.EBITDA,
+        input_kind=MetricInputKind.FUNDAMENTALS,
+        required_observations=1,
+        fundamental_calculator=calculate_ebitda,
+    ),
+)
+
+def _build_registry(definitions: Sequence[MetricDefinition]) -> Mapping[MetricCode, MetricDefinition]:
+    registry: dict[MetricCode, MetricDefinition] = {}
+
+    for definition in definitions:
+        if definition.metric in registry:
+            raise MetricRegistryError(f"Duplicate metric definition: {definition.metric.value}")
+
+        registry[definition.metric] = definition
+
+    missing_metrics = set(MetricCode).difference(registry)
+    if missing_metrics:
+        missing_values = ", ".join(sorted(metric.value for metric in missing_metrics))
+        raise MetricRegistryError(f"Metrics are missing from the registry: {missing_values}")
+
+    # read-only view of the registry
+    return MappingProxyType(registry)
+
+METRIC_REGISTRY: Mapping[MetricCode, MetricDefinition] = (
+    _build_registry(_METRIC_DEFINITIONS)
+)
+
+def get_metric_definition(metric: MetricCode) -> MetricDefinition:
+    """Return the immutable definition for a supported metric."""
+    try:
+        return METRIC_REGISTRY[metric]
+    except KeyError:
+        raise MetricRegistryError(f"Unsupported metric: {metric}")
+
+def calculate_daily_metric(metric: MetricCode, bars: Sequence[DailyBar]) -> MetricResult:
+    """Resolve and calculate a metric backed by daily bars."""
+    return get_metric_definition(metric).calculate_daily(bars)
+
+def calculate_fundamental_metric(metric: MetricCode, snapshots: Sequence[CompanyFundamentals]) -> MetricResult:
+    """Resolve and calculate a metric backed by fundamentals."""
+    return get_metric_definition(metric).calculate_fundamentals(snapshots)
