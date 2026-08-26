@@ -1,6 +1,7 @@
 """
-bind each metric to its required data fields and the calculator function, and provide a metric calculator entry
-solves the problem that ThesisMonotoring should not directly maintain a large amount of if/elif branches 
+bind each metric to its required data fields and the calculator function, and provide a metric calculator entry.
+some needs dailybars, some needs fundamentals
+solves the problem that ThesisMonotoring should not directly maintain a large amount of if/elif branches.
 """
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -34,7 +35,7 @@ class MetricInputKind(StrEnum):
     DAILY_BARS = "daily_bars"
     FUNDAMENTALS = "fundamentals"
 
-@dataclass(fronzen=True, slots=True)
+@dataclass(frozen=True, slots=True)
 class MetricDefinition:
     """Static calculation requirements for one deterministic metric."""
     
