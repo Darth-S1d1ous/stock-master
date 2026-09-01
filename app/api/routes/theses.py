@@ -12,8 +12,15 @@ from app.api.schemas import (
     RunThesisMonitoringRequest,
     ThesisConditionResponse,
     ThesisMonitoringResponse,
+    ThesisStatusHistoryResponse,
+    UpdateInvestmentThesisRequest,
+    UpdateThesisConditionRequest,
 )
-from app.database.thesis_repositories import RepositoryConflictError, ResourceNotFoundError
+from app.database.thesis_repositories import (
+    InvalidAggregateError,
+    RepositoryConflictError,
+    ResourceNotFoundError,
+)
 from app.domain.metric_calculator import MetricCalculationError
 from app.domain.metric_registry import MetricRegistryError
 from app.domain.rule_engine import RuleEvaluationError
@@ -25,6 +32,8 @@ from app.domain.thesis_models import (
 from app.services.thesis_monitoring_service import (
     InvalidMonitoringSourceError,
     MonitoringClockError,
+    MonitoringDataNotCollectedError,
+    MonitoringInsufficientDataError,
     ThesisNotMonitorableError,
 )
 
@@ -129,6 +138,82 @@ async def get_thesis(
         _raise_thesis_not_found()
 
     return InvestmentThesisResponse.model_validate(thesis)
+
+
+@router.patch("/{thesis_id}", response_model=InvestmentThesisResponse)
+async def update_thesis(
+    thesis_id: UUID,
+    request: UpdateInvestmentThesisRequest,
+    current_user: CurrentUser,
+    repository: ThesisRepositoryDependency,
+) -> InvestmentThesisResponse:
+    """Update thesis content or lifecycle status using optimistic locking."""
+
+    try:
+        thesis = await repository.update_thesis(
+            user_id=current_user.id,
+            thesis_id=thesis_id,
+            expected_version=request.expected_version,
+            title=request.title,
+            description=request.description,
+            status=request.status,
+            reason=request.reason,
+        )
+    except ResourceNotFoundError:
+        _raise_thesis_not_found()
+    except RepositoryConflictError:
+        _raise_api_error(
+            status_code=status.HTTP_409_CONFLICT,
+            code="thesis_version_conflict",
+            message="The investment thesis has changed; reload and retry.",
+        )
+    except InvalidAggregateError:
+        _raise_api_error(
+            status_code=status.HTTP_409_CONFLICT,
+            code="invalid_thesis_transition",
+            message="The requested thesis status transition is not allowed.",
+        )
+    return InvestmentThesisResponse.model_validate(thesis)
+
+
+@router.post("/{thesis_id}/archive", response_model=InvestmentThesisResponse)
+async def archive_thesis(
+    thesis_id: UUID,
+    request: UpdateInvestmentThesisRequest,
+    current_user: CurrentUser,
+    repository: ThesisRepositoryDependency,
+) -> InvestmentThesisResponse:
+    """Archive an owned thesis without deleting audit history."""
+
+    if request.status is not ThesisStatus.ARCHIVED:
+        _raise_api_error(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="archive_status_required",
+            message="The archive operation requires status archived.",
+        )
+    return await update_thesis(thesis_id, request, current_user, repository)
+
+
+@router.get(
+    "/{thesis_id}/status-history",
+    response_model=list[ThesisStatusHistoryResponse],
+)
+async def list_thesis_status_history(
+    thesis_id: UUID,
+    current_user: CurrentUser,
+    repository: ThesisRepositoryDependency,
+) -> list[ThesisStatusHistoryResponse]:
+    """Return lifecycle transitions for one owned thesis."""
+
+    try:
+        history = await repository.list_status_history(
+            user_id=current_user.id,
+            thesis_id=thesis_id,
+        )
+    except ResourceNotFoundError:
+        _raise_thesis_not_found()
+    return [ThesisStatusHistoryResponse.model_validate(item) for item in history]
+
 
 @router.post(
     "/{thesis_id}/conditions",
@@ -254,6 +339,40 @@ async def get_condition(
 
     return ThesisConditionResponse.model_validate(condition)
 
+
+@router.patch(
+    "/{thesis_id}/conditions/{condition_id}",
+    response_model=ThesisConditionResponse,
+)
+async def update_condition(
+    thesis_id: UUID,
+    condition_id: UUID,
+    request: UpdateThesisConditionRequest,
+    current_user: CurrentUser,
+    repository: ThesisRepositoryDependency,
+) -> ThesisConditionResponse:
+    """Create a new condition version while preserving its stable ID."""
+
+    changes = request.model_dump(exclude={"expected_version"}, exclude_unset=True)
+    try:
+        condition = await repository.update_condition(
+            user_id=current_user.id,
+            thesis_id=thesis_id,
+            condition_id=condition_id,
+            expected_version=request.expected_version,
+            changes=changes,
+        )
+    except ResourceNotFoundError:
+        _raise_condition_not_found()
+    except RepositoryConflictError:
+        _raise_api_error(
+            status_code=status.HTTP_409_CONFLICT,
+            code="condition_version_conflict",
+            message="The thesis condition has changed; reload and retry.",
+        )
+    return ThesisConditionResponse.model_validate(condition)
+
+
 @router.post(
     "/{thesis_id}/evaluate",
     response_model=ThesisMonitoringResponse,
@@ -303,18 +422,29 @@ async def evaluate_thesis(
                 "The investment thesis is not in a monitorable state."
             ),
         )
-    except (
-        MetricCalculationError,
-        MetricRegistryError,
-        RuleEvaluationError,
-    ):
+    except MonitoringDataNotCollectedError:
         _raise_api_error(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            code="monitoring_data_unavailable",
-            message=(
-                "The thesis could not be evaluated from the "
-                "available persisted observations."
-            ),
+            code="data_not_collected",
+            message="No market data has been collected for this request.",
+        )
+    except (MonitoringInsufficientDataError, MetricCalculationError):
+        _raise_api_error(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="insufficient_data",
+            message="The collected data is insufficient for this calculation.",
+        )
+    except MetricRegistryError:
+        _raise_api_error(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="unsupported_metric",
+            message="The requested metric is not supported.",
+        )
+    except RuleEvaluationError:
+        _raise_api_error(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="rule_evaluation_failed",
+            message="The configured rule could not be evaluated.",
         )
     except InvalidMonitoringSourceError:
         _raise_api_error(

@@ -1,0 +1,31 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：RandomNumber。
+# 运营禁用：base 与 std 实现差异不大，暂时禁用（生成器 --disable 保持，重新启用须走治理评审）。
+id: CPP_BASE_REUSE_STD_RANDOM_DEVICE
+enabled: false
+name: "std::random_device 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::random_device（限定或裸调用；方法调用 .random_device() 不在内；random_device 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "random_device"
+meta:
+  rationale: "util::crypto::RandomNumber 生成随机无符号整数，与 std::random_device 的非确定性随机数生成语义对应"
+  fix_suggestion: "改用 base 库等价实现：RandomNumber"
+  references:
+    - "common/include/crypto_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::random_device"
+  base_preferred: "util::crypto::RandomNumber"
+  reason: "util::crypto::RandomNumber 生成随机无符号整数，与 std::random_device 的非确定性随机数生成语义对应"

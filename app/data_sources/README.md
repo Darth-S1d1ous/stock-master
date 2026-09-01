@@ -1,11 +1,11 @@
 ```
-业务代码
+Application code
    ↓
 AlphaVantageDataSource
    ├── AlphaVantageClient
-   │      └── HTTP 请求与重试
-   ├── 日线解析器
+   │      └── HTTP requests and retries
+   ├── Daily-bar parser
    │      └── list[DailyBar]
-   └── 基本面解析器
+   └── Fundamentals parser
           └── CompanyFundamentals
 ```

@@ -53,17 +53,12 @@ class StockIngestionService:
 
         snapshot_date = fundamentals.received_at.date()
 
-        try:
-            processed_count = (await self._repository.save_daily_bars(bars))
-            await self._repository.save_company_fundamentals(
-                fundamentals=fundamentals,
-                snapshot_date=snapshot_date,
-            )
-
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+        processed_count = await self._repository.save_daily_bars(bars)
+        await self._repository.save_company_fundamentals(
+            fundamentals=fundamentals,
+            snapshot_date=snapshot_date,
+        )
+        await self._session.flush()
 
         return IngestionResult(
             symbol=normalized_symbol,
@@ -78,13 +73,13 @@ class StockIngestionService:
         """ Make sure the symbol is the same as the requested symbol """
         if bars_symbol != requested_symbol:
             raise ValueError(
-                "日线数据的股票代码与请求代码不一致："
-                f"请求 {requested_symbol}，返回 {bars_symbol}"
+                "The daily-bar symbol does not match the requested symbol: "
+                f"requested {requested_symbol}, returned {bars_symbol}"
             )
 
         if fundamentals_symbol != requested_symbol:
             raise ValueError(
-                "基本面数据的股票代码与请求代码不一致："
-                f"请求 {requested_symbol}，"
+                "The fundamentals symbol does not match the requested symbol: "
+                f"requested {requested_symbol}，"
                 f"返回 {fundamentals_symbol}"
             )

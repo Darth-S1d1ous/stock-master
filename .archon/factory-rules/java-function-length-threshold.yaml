@@ -1,0 +1,18 @@
+id: JAVA_FUNCTION_LENGTH_THRESHOLD
+enabled: true
+name: "Java 单方法有效代码行大于 80"
+severity: warn
+applies_to:
+  languages: [java]
+engine_requires: [ast]
+conditions:
+  all:
+    - kind: Count
+      count_kind: function_length
+      op: at_least
+      threshold: 81
+meta:
+  rationale: "方法有效代码行不含空行和纯注释行；超过 80 行通常意味着职责过多。"
+  fix_suggestion: "当前函数有效代码行超过 80 行阈值，需要优化；保留原方法入口，按校验、转换和副作用阶段提取私有方法。"
+  references: ["Archon effective method length policy"]
+  tags: [java, code_quality, function_length, ast]

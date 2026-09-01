@@ -1,0 +1,30 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：EnumDir。
+id: CPP_BASE_REUSE_STD_FILESYSTEM_DIRECTORY_ITERATOR
+enabled: true
+name: "std::filesystem::directory_iterator 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::filesystem::directory_iterator（限定或裸调用；方法调用 .directory_iterator() 不在内；filesystem::directory_iterator 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "filesystem::directory_iterator"
+meta:
+  rationale: "std::filesystem::directory_iterator 遍历目录；base util::file::EnumDir 提供等价枚举"
+  fix_suggestion: "改用 base 库等价实现：EnumDir"
+  references:
+    - "common/include/file_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::filesystem::directory_iterator"
+  base_preferred: "util::file::EnumDir"
+  reason: "std::filesystem::directory_iterator 遍历目录；base util::file::EnumDir 提供等价枚举"

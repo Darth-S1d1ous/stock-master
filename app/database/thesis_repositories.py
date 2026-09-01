@@ -1,16 +1,14 @@
-"""
-假设：
-    事务由应用服务控制，Repository 只执行 flush()，不执行 commit()；
-    所有读取都强制使用 user_id 做所有权过滤；
-    同一条件、规则版本和数据日期只能有一条评估；
-    同一评估只能生成一个事件；
-    重复执行评估或事件创建时返回已存在的记录。
+"""Persistence assumptions for the thesis monitoring aggregate.
+
+Transactions are owned by the application layer. Every owned read filters by
+``user_id``. Evaluations and events remain idempotent under their database
+identities, while feedback and lifecycle history are append-only.
 """
 from collections.abc import Sequence
-from datetime import date
-from uuid import UUID
+from datetime import UTC, date, datetime
+from uuid import UUID, uuid4
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +19,8 @@ from app.database.domain_tables import (
     InvestmentThesisTable,
     RuleEvaluationTable,
     ThesisConditionTable,
+    ThesisConditionVersionTable,
+    ThesisStatusHistoryTable,
 )
 from app.domain.event_models import (
     DomainEvent,
@@ -39,6 +39,7 @@ from app.domain.thesis_models import (
     MetricCode,
     ThesisCondition,
     ThesisStatus,
+    ThesisStatusChange,
 )
 
 class ThesisRepositoryError(RuntimeError):
@@ -97,6 +98,69 @@ class ThesisRepository:
         # commit() finishes the transaction by committing the changes to the database, which will be visible to other transactions
         await self._session.flush()
         return thesis
+
+    async def update_thesis(
+        self,
+        *,
+        user_id: UUID,
+        thesis_id: UUID,
+        expected_version: int,
+        title: str | None = None,
+        description: str | None = None,
+        status: ThesisStatus | None = None,
+        reason: str | None = None,
+        triggering_event_id: UUID | None = None,
+    ) -> InvestmentThesis:
+        """Apply an optimistic update and append status history when needed."""
+
+        current = await self.require_thesis(user_id=user_id, thesis_id=thesis_id)
+        if current.version != expected_version:
+            raise RepositoryConflictError("Investment thesis version conflict")
+        if status is not None and status is not current.status:
+            self._validate_status_transition(current.status, status)
+        values: dict[str, object] = {
+            "version": expected_version + 1,
+            "updated_at": datetime.now(UTC),
+        }
+        if title is not None:
+            values["title"] = title
+        if description is not None:
+            values["description"] = description
+        if status is not None:
+            values["status"] = status.value
+
+        statement = (
+            update(InvestmentThesisTable)
+            .where(
+                InvestmentThesisTable.id == thesis_id,
+                InvestmentThesisTable.user_id == user_id,
+                InvestmentThesisTable.version == expected_version,
+            )
+            .values(**values)
+            .returning(InvestmentThesisTable)
+        )
+        result = await self._session.execute(statement)
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise RepositoryConflictError("Investment thesis version conflict")
+
+        if status is not None and status is not current.status:
+            if reason is None:
+                raise InvalidAggregateError("Status changes require a reason")
+            self._session.add(
+                ThesisStatusHistoryTable(
+                    id=uuid4(),
+                    thesis_id=thesis_id,
+                    user_id=user_id,
+                    from_status=current.status.value,
+                    to_status=status.value,
+                    reason=reason,
+                    triggering_event_id=triggering_event_id,
+                    changed_at=values["updated_at"],
+                )
+            )
+        await self._session.flush()
+        return self._thesis_from_row(row)
 
     async def get_thesis(self, user_id: UUID, thesis_id: UUID) -> InvestmentThesis | None:
         statement: Select[tuple[InvestmentThesisTable]] = (
@@ -191,8 +255,60 @@ class ThesisRepository:
         if inserted_id is None:
             raise RepositoryConflictError("Thesis condition already exists or is inaccessible")
 
+        self._session.add(self._condition_version_row(condition))
         await self._session.flush()
         return condition
+
+    async def update_condition(
+        self,
+        *,
+        user_id: UUID,
+        thesis_id: UUID,
+        condition_id: UUID,
+        expected_version: int,
+        changes: dict[str, object],
+    ) -> ThesisCondition:
+        """Update the current condition and append a complete version snapshot."""
+
+        current = await self.require_condition(
+            user_id=user_id,
+            thesis_id=thesis_id,
+            condition_id=condition_id,
+        )
+        if current.version != expected_version:
+            raise RepositoryConflictError("Thesis condition version conflict")
+        values: dict[str, object] = {
+            "version": expected_version + 1,
+            "updated_at": datetime.now(UTC),
+        }
+        for field_name, value in changes.items():
+            if field_name in {"kind", "metric", "operator"} and value is not None:
+                values[field_name] = value.value  # type: ignore[union-attr]
+            else:
+                values[field_name] = value
+
+        statement = (
+            update(ThesisConditionTable)
+            .where(
+                ThesisConditionTable.id == condition_id,
+                ThesisConditionTable.thesis_id == thesis_id,
+                ThesisConditionTable.user_id == user_id,
+                ThesisConditionTable.version == expected_version,
+            )
+            .values(**values)
+            .returning(ThesisConditionTable)
+        )
+        result = await self._session.execute(statement)
+        row = result.scalar_one_or_none()
+        if row is None:
+            if current.version != expected_version:
+                raise RepositoryConflictError("Thesis condition version conflict")
+            raise RepositoryConflictError("Thesis condition could not be updated")
+
+        updated = self._condition_from_row(row)
+        self._session.add(self._condition_version_row(updated))
+        await self._session.flush()
+        return updated
 
     async def get_condition(
         self,
@@ -563,7 +679,11 @@ class ThesisRepository:
         user_id: UUID,
         *,
         thesis_id: UUID | None = None,
+        symbol: str | None = None,
+        severity: EventSeverity | None = None,
         status: EventStatus | None = None,
+        occurred_from: date | None = None,
+        occurred_to: date | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[DomainEvent]:
@@ -579,10 +699,21 @@ class ThesisRepository:
                 DomainEventTable.thesis_id == thesis_id
             )
 
+        if symbol is not None:
+            normalized_symbol = symbol.strip().upper()
+            if not normalized_symbol:
+                raise ValueError("Symbol cannot be empty")
+            statement = statement.where(DomainEventTable.symbol == normalized_symbol)
+        if severity is not None:
+            statement = statement.where(DomainEventTable.severity == severity.value)
         if status is not None:
-            statement = statement.where(
-                DomainEventTable.status == status.value
-            )
+            statement = statement.where(DomainEventTable.status == status.value)
+        if occurred_from is not None:
+            statement = statement.where(DomainEventTable.occurred_on >= occurred_from)
+        if occurred_to is not None:
+            statement = statement.where(DomainEventTable.occurred_on <= occurred_to)
+        if occurred_from is not None and occurred_to is not None and occurred_from > occurred_to:
+            raise ValueError("occurred_from cannot be later than occurred_to")
 
         statement = (
             statement
@@ -658,48 +789,99 @@ class ThesisRepository:
                 comment=feedback.comment,
                 created_at=feedback.created_at,
             )
-            .on_conflict_do_update(
-                constraint="event_feedback_user_identity",
-                set_={
-                    "feedback_type": feedback.feedback_type.value,
-                    "comment": feedback.comment,
-                },
-            )
             .returning(EventFeedbackTable.id)
         )
-
-        _ = await self._session.execute(statement)
+        result = await self._session.execute(statement)
+        if result.scalar_one_or_none() is None:
+            raise RepositoryConflictError("Event feedback could not be persisted")
         await self._session.flush()
-
-        persisted = await self.get_feedback(
-            user_id=feedback.user_id,
-            event_id=feedback.event_id,
-        )
-
-        if persisted is None:
-            raise RepositoryConflictError(
-                "Event feedback could not be persisted"
-            )
-
-        return persisted
+        return feedback
 
     async def get_feedback(
         self,
         user_id: UUID,
         event_id: UUID,
     ) -> EventFeedback | None:
-        statement: Select[tuple[EventFeedbackTable]] = (
+        history = await self.list_feedback_history(
+            user_id=user_id,
+            event_id=event_id,
+            limit=1,
+        )
+        return history[0] if history else None
+
+    async def list_feedback_history(
+        self,
+        *,
+        user_id: UUID,
+        event_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[EventFeedback]:
+        """Return newest feedback first after checking event ownership."""
+
+        self._validate_pagination(limit=limit, offset=offset)
+        if await self.get_event(user_id=user_id, event_id=event_id) is None:
+            raise ResourceNotFoundError("Domain event was not found")
+        statement = (
             select(EventFeedbackTable)
             .where(
                 EventFeedbackTable.event_id == event_id,
                 EventFeedbackTable.user_id == user_id,
             )
+            .order_by(EventFeedbackTable.created_at.desc(), EventFeedbackTable.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
+        result = await self._session.execute(statement)
+        return [self._feedback_from_row(row) for row in result.scalars()]
 
+    async def update_event_status(
+        self,
+        *,
+        user_id: UUID,
+        event_id: UUID,
+        event_status: EventStatus,
+    ) -> DomainEvent:
+        """Update an owned event workflow status."""
+
+        statement = (
+            update(DomainEventTable)
+            .where(
+                DomainEventTable.id == event_id,
+                DomainEventTable.user_id == user_id,
+            )
+            .values(status=event_status.value)
+            .returning(DomainEventTable)
+        )
         result = await self._session.execute(statement)
         row = result.scalar_one_or_none()
+        if row is None:
+            raise ResourceNotFoundError("Domain event was not found")
+        await self._session.flush()
+        return self._event_from_row(row)
 
-        return self._feedback_from_row(row) if row is not None else None
+    async def list_status_history(
+        self,
+        *,
+        user_id: UUID,
+        thesis_id: UUID,
+    ) -> list[ThesisStatusChange]:
+        """Return status transitions for one owned thesis in chronological order."""
+
+        await self.require_thesis(user_id=user_id, thesis_id=thesis_id)
+        statement = (
+            select(ThesisStatusHistoryTable)
+            .where(
+                ThesisStatusHistoryTable.thesis_id == thesis_id,
+                ThesisStatusHistoryTable.user_id == user_id,
+            )
+            .order_by(
+                ThesisStatusHistoryTable.changed_at,
+                ThesisStatusHistoryTable.id,
+            )
+        )
+        result = await self._session.execute(statement)
+        return [self._status_change_from_row(row) for row in result.scalars()]
 
     @staticmethod
     def _validate_event_relationship(
@@ -760,6 +942,30 @@ class ThesisRepository:
                 )
 
     @staticmethod
+    def _validate_status_transition(
+        current: ThesisStatus,
+        target: ThesisStatus,
+    ) -> None:
+        allowed = {
+            ThesisStatus.ACTIVE: {
+                ThesisStatus.CHALLENGED,
+                ThesisStatus.INVALIDATED,
+                ThesisStatus.ARCHIVED,
+            },
+            ThesisStatus.CHALLENGED: {
+                ThesisStatus.ACTIVE,
+                ThesisStatus.INVALIDATED,
+                ThesisStatus.ARCHIVED,
+            },
+            ThesisStatus.INVALIDATED: {ThesisStatus.ARCHIVED},
+            ThesisStatus.ARCHIVED: set(),
+        }
+        if target not in allowed[current]:
+            raise InvalidAggregateError(
+                f"Invalid thesis status transition: {current.value} to {target.value}"
+            )
+
+    @staticmethod
     def _validate_pagination(
         limit: int,
         offset: int,
@@ -804,6 +1010,42 @@ class ThesisRepository:
             version=row.version,
             created_at=row.created_at,
             updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    def _condition_version_row(
+        condition: ThesisCondition,
+    ) -> ThesisConditionVersionTable:
+        return ThesisConditionVersionTable(
+            id=uuid4(),
+            condition_id=condition.id,
+            thesis_id=condition.thesis_id,
+            user_id=condition.user_id,
+            version=condition.version,
+            name=condition.name,
+            description=condition.description,
+            kind=condition.kind.value,
+            metric=condition.metric.value,
+            operator=condition.operator.value,
+            threshold=condition.threshold,
+            consecutive_periods=condition.consecutive_periods,
+            enabled=condition.enabled,
+            created_at=condition.updated_at,
+        )
+
+    @staticmethod
+    def _status_change_from_row(
+        row: ThesisStatusHistoryTable,
+    ) -> ThesisStatusChange:
+        return ThesisStatusChange(
+            id=row.id,
+            thesis_id=row.thesis_id,
+            user_id=row.user_id,
+            from_status=ThesisStatus(row.from_status),
+            to_status=ThesisStatus(row.to_status),
+            reason=row.reason,
+            triggering_event_id=row.triggering_event_id,
+            changed_at=row.changed_at,
         )
 
     @staticmethod

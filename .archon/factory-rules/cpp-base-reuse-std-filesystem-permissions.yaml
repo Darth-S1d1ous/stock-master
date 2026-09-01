@@ -1,0 +1,30 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：ChmodFile。
+id: CPP_BASE_REUSE_STD_FILESYSTEM_PERMISSIONS
+enabled: true
+name: "std::filesystem::permissions 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::filesystem::permissions（限定或裸调用；方法调用 .permissions() 不在内；filesystem::permissions 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "filesystem::permissions"
+meta:
+  rationale: "util::file::ChmodFile 修改文件权限，与 std::filesystem::permissions 语义对应"
+  fix_suggestion: "改用 base 库等价实现：ChmodFile"
+  references:
+    - "common/include/file_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::filesystem::permissions"
+  base_preferred: "util::file::ChmodFile"
+  reason: "util::file::ChmodFile 修改文件权限，与 std::filesystem::permissions 语义对应"

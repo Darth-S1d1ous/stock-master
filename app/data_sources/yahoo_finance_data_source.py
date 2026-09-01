@@ -17,11 +17,11 @@ _SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 
 
 class YahooFinanceError(Exception):
-    """Yahoo Finance 数据源异常。"""
+    """Yahoo Finance data source error."""
 
 
 class YahooFinanceDataSource:
-    """通过 yfinance 获取 Yahoo Finance 日线与基本面数据。"""
+    """Fetch Yahoo Finance daily bars and fundamentals through yfinance."""
 
     async def __aenter__(self) -> "YahooFinanceDataSource":
         return self
@@ -74,12 +74,12 @@ class YahooFinanceDataSource:
             )
         except Exception as exc:
             raise YahooFinanceError(
-                f"Yahoo Finance 日线请求失败：{symbol}"
+                f"Yahoo Finance daily-bar request failed: {symbol}"
             ) from exc
 
         if history.empty:
             raise YahooFinanceError(
-                f"Yahoo Finance 没有返回日线数据：{symbol}"
+                f"Yahoo Finance returned no daily bars: {symbol}"
             )
 
         received_at = datetime.now(UTC)
@@ -111,7 +111,7 @@ class YahooFinanceDataSource:
                 )
             except (KeyError, ValueError, ValidationError) as exc:
                 raise YahooFinanceError(
-                    f"Yahoo Finance 日线解析失败：{symbol} {timestamp}"
+                    f"Yahoo Finance daily-bar parsing failed: {symbol} {timestamp}"
                 ) from exc
 
         bars.sort(key=lambda bar: bar.trading_date)
@@ -125,18 +125,18 @@ class YahooFinanceDataSource:
             info = yf.Ticker(symbol).get_info()
         except Exception as exc:
             raise YahooFinanceError(
-                f"Yahoo Finance 基本面请求失败：{symbol}"
+                f"Yahoo Finance fundamentals request failed: {symbol}"
             ) from exc
 
         if not isinstance(info, dict) or not info:
             raise YahooFinanceError(
-                f"Yahoo Finance 没有返回基本面数据：{symbol}"
+                f"Yahoo Finance returned no fundamentals: {symbol}"
             )
 
         returned_symbol = str(info.get("symbol", symbol)).strip().upper()
         if returned_symbol != symbol:
             raise YahooFinanceError(
-                f"Yahoo Finance 返回了错误的股票代码：{returned_symbol}"
+                f"Yahoo Finance returned an unexpected symbol: {returned_symbol}"
             )
 
         try:
@@ -166,26 +166,26 @@ class YahooFinanceDataSource:
             )
         except (ValueError, ValidationError) as exc:
             raise YahooFinanceError(
-                f"Yahoo Finance 基本面解析失败：{symbol}"
+                f"Yahoo Finance fundamentals parsing failed: {symbol}"
             ) from exc
 
     @staticmethod
     def _validate_output_size(output_size: str) -> None:
         if output_size not in ("compact", "full"):
-            raise ValueError("output_size 必须是 'compact' 或 'full'")
+            raise ValueError("output_size must be 'compact' 或 'full'")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
         normalized = symbol.strip().upper()
         if not _SYMBOL_PATTERN.fullmatch(normalized):
-            raise ValueError("股票代码格式无效")
+            raise ValueError("Invalid stock symbol format")
         return normalized
 
     @staticmethod
     def _to_decimal(value: object) -> Decimal:
         parsed = YahooFinanceDataSource._to_optional_decimal(value)
         if parsed is None:
-            raise ValueError("价格不能为空")
+            raise ValueError("Price cannot be empty")
         return parsed
 
     @staticmethod
@@ -197,14 +197,14 @@ class YahooFinanceDataSource:
         try:
             parsed = Decimal(str(value))
         except (InvalidOperation, ValueError) as exc:
-            raise ValueError(f"无效数值：{value!r}") from exc
+            raise ValueError(f"Invalid numeric value: {value!r}") from exc
         return parsed if parsed.is_finite() else None
 
     @staticmethod
     def _to_int(value: object) -> int:
         parsed = YahooFinanceDataSource._to_optional_decimal(value)
         if parsed is None or parsed < 0 or parsed != parsed.to_integral_value():
-            raise ValueError(f"无效成交量：{value!r}")
+            raise ValueError(f"Invalid volume: {value!r}")
         return int(parsed)
 
     @staticmethod

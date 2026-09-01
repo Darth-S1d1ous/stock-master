@@ -27,8 +27,13 @@ class EvidenceType(StrEnum):
     SOURCE_DOCUMENT = "source_document"
 
 class FeedbackType(StrEnum):
+    """User classifications recorded as an append-only feedback history."""
+
     USEFUL = "useful"
+    NOT_USEFUL = "not_useful"
     FALSE_POSITIVE = "false_positive"
+    CONFIRMED = "confirmed"
+    IGNORED = "ignored"
     DUPLICATE = "duplicate"
     NOT_RELEVANT = "not_relevant"
 
@@ -266,7 +271,7 @@ class EventEvidence(BaseModel):
 
 
 class EventFeedback(BaseModel):
-    """A user's feedback on the value of a domain event."""
+    """One immutable entry in a user's append-only event feedback history."""
 
     model_config = ConfigDict(
         extra="forbid",

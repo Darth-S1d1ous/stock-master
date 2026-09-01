@@ -9,7 +9,7 @@ OutputSize = Literal["compact", "full"]
 
 
 class StockDataSource(Protocol):
-    """所有股票数据源对业务层暴露的统一契约。"""
+    """Shared contract exposed by all stock data sources to the application layer."""
 
     async def __aenter__(self) -> Self: ...
 

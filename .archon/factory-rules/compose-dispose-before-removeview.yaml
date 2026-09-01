@@ -1,0 +1,61 @@
+# ComposeView removeView 前必须 disposeComposition
+# TAPD Bug 1070112211158936354
+id: COMPOSE_DISPOSE_BEFORE_REMOVEVIEW
+enabled: true
+name: "ComposeView removeView 前必须 disposeComposition"
+severity: error
+engine_requires: [ast]
+applies_to:
+  languages: [kotlin]
+patterns:
+  # 只匹配 receiver 名含 compose 关键词的 removeView（精确过滤）
+  - id: compose_remove_view
+    spec:
+      type: MethodCall
+      value:
+        method: "removeView"
+        receiver_name: "*compose*"
+  - id: dispose_composition
+    spec: { type: MethodCall, value: { method: "disposeComposition" } }
+conditions:
+  all:
+    - kind: NotHas
+      node: dispose_composition
+meta:
+  rationale: |
+    ComposeView 在被 removeView 之前必须显式调用 disposeComposition()。
+    receiver_name "*compose*" 精确匹配变量名含 compose 的 receiver（composeView/composeContainer 等），
+    避免匹配 llGuideList/container 等普通 View。
+  fix_suggestion: |
+    override fun onDestroyView() {
+        composeView?.disposeComposition()
+        container?.removeView(composeView)
+    }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：在原行 `composeContainer.removeView(composeView)` 子串前
+  # 插入 `composeView?.disposeComposition()` 调用，
+  # 保留原行的 receiver、参数、末尾分号等上下文。
+  # dispose 应在 ComposeView（removeView 的参数）上调用，不是 container（receiver）。
+  fix_suggestion_template:
+    template: |
+      // removeView 前未 disposeComposition → Compose 内存泄漏
+      - {{original_line}}
+      + {{fixed_line}}
+    extractors:
+      view_ref:
+        from: issue_line
+        # 提取 removeView 的参数（即 ComposeView 变量名）
+        regex: 'removeView\s*\(\s*(\w*[Cc]ompose\w*)\s*\)'
+        group: 1
+        default: 'composeView'
+      fixed_line:
+        from: issue_line
+        # 匹配整行，replace_with 输出「disposeComposition 调用 + 换行 + 原行」
+        # group1=原行完整内容
+        # {{view_ref}} 引用阶段 1 提取的参数变量名（ComposeView）
+        # yaml 双引号字符串中 \n 是换行转义
+        regex: '^(.*)$'
+        replace_with: "{{view_ref}}?.disposeComposition()  // 先释放 Compose\n${1}"
+  references: ["CWE-401"]
+  tapd_ids: ["1070112211158936354"]
+  tags: [android, kotlin, memory_leak, compose, lifecycle, context_aware_suggestion]

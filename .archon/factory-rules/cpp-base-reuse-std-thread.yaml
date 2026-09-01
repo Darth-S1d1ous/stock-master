@@ -1,0 +1,30 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：Thread。
+id: CPP_BASE_REUSE_STD_THREAD
+enabled: true
+name: "std::thread 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::thread（限定或裸调用；方法调用 .thread() 不在内；thread 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "thread"
+meta:
+  rationale: "std::thread 线程；base base::threading::Thread 提供等价线程封装"
+  fix_suggestion: "改用 base 库等价实现：Thread"
+  references:
+    - "core/include/thread.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::thread"
+  base_preferred: "base::threading::Thread"
+  reason: "std::thread 线程；base base::threading::Thread 提供等价线程封装"

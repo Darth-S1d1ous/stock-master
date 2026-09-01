@@ -1,0 +1,33 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：CreateOfStream。
+id: CPP_BASE_REUSE_STD_OFSTREAM
+enabled: true
+name: "std::ofstream 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: stream_construct
+    description: "构造或初始化 std::ofstream（裸声明 regular 档放行，deep 档跨文件反查；不检测 .open()——参数流引用是使用不是创建）"
+    spec:
+      type: VariableDef
+      value:
+        var_name: ""
+        var_type: "ofstream"
+        init_required: true
+        init_excludes: ["CreateOfStream"]
+meta:
+  rationale: "util::file::CreateOfStream 创建文件输出流对象，与 std::ofstream 语义完全对应"
+  fix_suggestion: "改用 base 库等价实现：CreateOfStream"
+  references:
+    - "common/include/file_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::ofstream"
+  base_preferred: "util::file::CreateOfStream"
+  reason: "util::file::CreateOfStream 创建文件输出流对象，与 std::ofstream 语义完全对应"

@@ -74,6 +74,32 @@ class InvestmentThesis(BaseModel):
             raise ValueError("updated_at must be after created_at")
         return self
 
+class ThesisStatusChange(BaseModel):
+    """One immutable transition in an investment thesis lifecycle."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        str_strip_whitespace=True,
+    )
+
+    id: UUID = Field(default_factory=uuid4)
+    thesis_id: UUID
+    user_id: UUID
+    from_status: ThesisStatus
+    to_status: ThesisStatus
+    reason: str = Field(min_length=1, max_length=500)
+    triggering_event_id: UUID | None = None
+    changed_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+
+    @field_validator("changed_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("changed_at must be timezone-aware")
+        return value
+
+
 class ThesisCondition(BaseModel):
     """ investment thesis condition that can be deterministically determined by code """
 

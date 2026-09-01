@@ -1,0 +1,72 @@
+# 禁止裸用 clang_createIndex，强制走 RAII 包装
+# TAPD Bug 1070112211157293215：cpp_code_handler.cc parse 失败分支未 disposeIndex
+id: CPP_CLANG_CXINDEX_MUST_USE_RAII
+enabled: true
+name: "C++ libclang CXIndex 必须使用 RAII 包装（禁止裸用 clang_createIndex）"
+severity: error
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+patterns:
+  - id: clang_create_index
+    spec: { type: Call, value: { name: "clang_createIndex" } }
+  - id: clang_dispose_index
+    spec: { type: Call, value: { name: "clang_disposeIndex" } }
+conditions:
+  all:
+    - kind: NotHas
+      node: clang_dispose_index
+    - kind: InModule
+      module_glob: "**/cpp_code_handler/**"
+meta:
+  rationale: |
+    libclang 的 CXIndex 句柄由 clang_createIndex() 显式分配，必须配对调用
+    clang_disposeIndex() 释放。CXIndex 没有自带 RAII，多退出路径函数中
+    极易遗漏释放调用（错误分支 return / 早退 / 异常）。
+
+    典型 bug（TAPD 1070112211157293215）：clang_parseTranslationUnit 失败
+    分支直接 return，未释放 tl_index → libclang 资源累积泄漏，长时间运行
+    的 midl 进程吃满内存。
+
+    根治方案：禁止业务代码直接调用 clang_createIndex，统一使用项目提供的
+    RAII 包装类 CXIndexRAII，析构自动 dispose，杜绝漏释放。
+  fix_suggestion: |
+    // TAPD 1070112211157293215 原始 bug：
+    // clang_parseTranslationUnit 失败时直接 return，未释放 tl_index -> CXIndex 泄漏
+    //
+    // 修复前：
+    //   auto unit = clang_parseTranslationUnit(tl_index, ...);
+    //   if (!unit) {
+    //       return;  // tl_index 未释放！
+    //   }
+    //
+    // 修复后（return 前添加 clang_disposeIndex）：
+    //   auto unit = clang_parseTranslationUnit(tl_index, ...);
+    //   if (!unit) {
+    //       clang_disposeIndex(tl_index);  // 修复：提前释放
+    //       return;
+    //   }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：从 clang_createIndex 调用行提取 CXIndex 变量名
+  # 生成在 if (!unit) return 前插入 clang_disposeIndex(var)
+  fix_suggestion_template:
+    template: |
+      // clang_createIndex 创建的 CXIndex 句柄在 return 前未释放 → 泄漏
+      - {{original_line}}
+        {{indent}}if (!unit) {
+        {{indent}}    return;
+        {{indent}}}
+      + {{original_line}}
+        {{indent}}if (!unit) {
+        {{indent}}    clang_disposeIndex({{var_name}});
+        {{indent}}    return;
+        {{indent}}}
+    extractors:
+      var_name:
+        from: issue_line
+        regex: '(?:CXIndex\s+|(\w+)\s*=\s*)clang_createIndex'
+        group: 1
+        default: tl_index
+  references: ["CWE-401", "C++ Core Guidelines R.1"]
+  tapd_ids: ["1070112211157293215"]
+  tags: [cpp, libclang, resource_leak, raii, context_aware_suggestion]

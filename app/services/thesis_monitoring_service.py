@@ -52,6 +52,14 @@ class MonitoringClockError(ThesisMonitoringError):
     """Raised when the monitoring clock returns an invalid timestamp."""
 
 
+class MonitoringDataNotCollectedError(ThesisMonitoringError):
+    """Raised when no persisted observations exist for a required input."""
+
+
+class MonitoringInsufficientDataError(ThesisMonitoringError):
+    """Raised when observations exist but cannot satisfy a metric."""
+
+
 @dataclass(frozen=True, slots=True)
 class ConditionMonitoringResult:
     """Result of evaluating one thesis condition."""
@@ -61,6 +69,7 @@ class ConditionMonitoringResult:
     evaluation: RuleEvaluation
     event: DomainEvent | None
     evidence: tuple[EventEvidence, ...]
+    reused_evaluation: bool = False
 
 @dataclass(frozen=True, slots=True)
 class ThesisMonitoringResult:
@@ -155,6 +164,29 @@ class ThesisMonitoringService:
             )
             condition_results.append(result)
 
+        invalidation_result = next(
+            (
+                item
+                for item in condition_results
+                if item.condition.kind is ConditionKind.INVALIDATION
+                and item.evaluation.matched
+                and item.event is not None
+            ),
+            None,
+        )
+        if (
+            invalidation_result is not None
+            and thesis.status is not ThesisStatus.INVALIDATED
+        ):
+            thesis = await self._thesis_repo.update_thesis(
+                user_id=user_id,
+                thesis_id=thesis.id,
+                expected_version=thesis.version,
+                status=ThesisStatus.INVALIDATED,
+                reason="An invalidation condition matched.",
+                triggering_event_id=invalidation_result.event.id,
+            )
+
         completed_at = self._now()
 
         return ThesisMonitoringResult(
@@ -195,9 +227,10 @@ class ThesisMonitoringService:
             prior_evaluations=prior_evaluations,
         )
 
-        # The repository may return an existing evaluation when the same
-        # condition version and data date have already been processed.
-        evaluation = (await self._thesis_repo.save_rule_evaluation(candidate_evaluation))
+        evaluation = await self._thesis_repo.save_rule_evaluation(
+            candidate_evaluation
+        )
+        reused_evaluation = evaluation.id != candidate_evaluation.id
 
         if not evaluation.matched:
             return ConditionMonitoringResult(
@@ -206,6 +239,7 @@ class ThesisMonitoringService:
                 evaluation=evaluation,
                 event=None,
                 evidence=(),
+                reused_evaluation=reused_evaluation,
             )
 
         candidate_event = self._build_event(
@@ -231,7 +265,8 @@ class ThesisMonitoringService:
             metric_result=metric_result,
             evaluation=evaluation,
             event=event,
-            evidence=tuple(evidence)
+            evidence=tuple(evidence),
+            reused_evaluation=reused_evaluation,
         )
 
     async def _load_daily_bars(
@@ -248,14 +283,21 @@ class ThesisMonitoringService:
         if required_observations is None:
             return []
 
-        return (
-            await self._stock_data_repo.get_recent_daily_bars(
-                symbol=thesis.symbol,
-                source=source,
-                adjustment=adjustment,
-                limit=required_observations,
-            )
+        bars = await self._stock_data_repo.get_recent_daily_bars(
+            symbol=thesis.symbol,
+            source=source,
+            adjustment=adjustment,
+            limit=required_observations,
         )
+        if not bars:
+            raise MonitoringDataNotCollectedError(
+                "No daily bars have been collected for this symbol and source"
+            )
+        if len(bars) < required_observations:
+            raise MonitoringInsufficientDataError(
+                "Not enough daily bars are available for the configured metrics"
+            )
+        return bars
 
     async def _load_fundamentals(
         self,
@@ -278,13 +320,20 @@ class ThesisMonitoringService:
             self._fundamental_history_limit,
         )
 
-        return await (
-            self._stock_data_repo.get_company_fundamentals_history(
-                symbol=thesis.symbol,
-                source=source,
-                limit=limit,
-            )
+        snapshots = await self._stock_data_repo.get_company_fundamentals_history(
+            symbol=thesis.symbol,
+            source=source,
+            limit=limit,
         )
+        if not snapshots:
+            raise MonitoringDataNotCollectedError(
+                "No fundamentals have been collected for this symbol and source"
+            )
+        if len(snapshots) < required_observations:
+            raise MonitoringInsufficientDataError(
+                "Not enough fundamental snapshots are available for the configured metrics"
+            )
+        return snapshots
 
     async def _load_prior_evaluations(
         self,

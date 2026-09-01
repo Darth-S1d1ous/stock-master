@@ -20,15 +20,15 @@ _ALLOWED_API_HOSTS = frozenset({"finnhub.io"})
 
 
 class FinnhubError(Exception):
-    """Finnhub 数据源异常基类。"""
+    """Base exception for Finnhub data source errors."""
 
 
 class FinnhubRateLimitError(FinnhubError):
-    """Finnhub 调用频率受限。"""
+    """Finnhub rate limit reached."""
 
 
 class FinnhubDataSource:
-    """Finnhub 日线与基础估值数据源。"""
+    """Finnhub daily-bar and fundamental valuation data source."""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class FinnhubDataSource:
 
     async def __aenter__(self) -> "FinnhubDataSource":
         if not self._settings.finnhub_api_key.get_secret_value():
-            raise ValueError("缺少 FINNHUB_API_KEY")
+            raise ValueError("FINNHUB_API_KEY is required")
         if self._provided_http_client is None:
             self._owned_http_client = httpx.AsyncClient(
                 base_url=self._settings.finnhub_base_url,
@@ -125,12 +125,12 @@ class FinnhubDataSource:
                 httpx.RemoteProtocolError,
             ):
                 if attempt == max_attempts:
-                    raise FinnhubError("Finnhub 网络请求失败") from None
+                    raise FinnhubError("Finnhub network request failed") from None
                 await asyncio.sleep(min(2 ** (attempt - 1), 8))
                 continue
 
             if response.status_code == 429:
-                raise FinnhubRateLimitError("Finnhub API 调用频率受限")
+                raise FinnhubRateLimitError("Finnhub API rate limit reached")
             if 500 <= response.status_code < 600 and attempt < max_attempts:
                 await asyncio.sleep(min(2 ** (attempt - 1), 8))
                 continue
@@ -139,23 +139,23 @@ class FinnhubDataSource:
                 payload = response.json()
             except (httpx.HTTPStatusError, ValueError):
                 raise FinnhubError(
-                    f"Finnhub 返回无效响应，HTTP {response.status_code}"
+                    f"Finnhub returned an invalid response with HTTP status {response.status_code}"
                 ) from None
 
             if not isinstance(payload, Mapping):
-                raise FinnhubError("Finnhub JSON 顶层必须是对象")
+                raise FinnhubError("Finnhub JSON root must be an object")
             error = payload.get("error")
             if isinstance(error, str) and error:
-                raise FinnhubError("Finnhub 拒绝请求")
+                raise FinnhubError("Finnhub rejected the request")
             return payload
 
-        raise FinnhubError("Finnhub 请求未获得响应")
+        raise FinnhubError("Finnhub request returned no response")
 
     def _get_http_client(self) -> httpx.AsyncClient:
         if self._provided_http_client is not None:
             return self._provided_http_client
         if self._owned_http_client is None:
-            raise RuntimeError("请使用 async with 管理 FinnhubDataSource")
+            raise RuntimeError("Use async with to manage FinnhubDataSource")
         return self._owned_http_client
 
     @staticmethod
@@ -166,9 +166,9 @@ class FinnhubDataSource:
     ) -> list[DailyBar]:
         status = payload.get("s")
         if status == "no_data":
-            raise FinnhubError(f"Finnhub 没有返回日线数据：{symbol}")
+            raise FinnhubError(f"Finnhub returned no daily bars: {symbol}")
         if status != "ok":
-            raise FinnhubError("Finnhub 日线状态异常")
+            raise FinnhubError("Finnhub daily-bar status is invalid")
 
         opens = FinnhubDataSource._require_sequence(payload, "o")
         highs = FinnhubDataSource._require_sequence(payload, "h")
@@ -179,7 +179,7 @@ class FinnhubDataSource:
         arrays = (opens, highs, lows, closes, volumes, timestamps)
         lengths = {len(values) for values in arrays}
         if len(lengths) != 1 or lengths == {0}:
-            raise FinnhubError("Finnhub 日线数组长度不一致或为空")
+            raise FinnhubError("Finnhub daily-bar arrays are empty or have inconsistent lengths")
 
         received_at = datetime.now(UTC)
         bars: list[DailyBar] = []
@@ -203,7 +203,7 @@ class FinnhubDataSource:
                     )
                 )
         except (InvalidOperation, TypeError, ValueError, ValidationError) as exc:
-            raise FinnhubError(f"Finnhub 日线解析失败：{symbol}") from exc
+            raise FinnhubError(f"Finnhub daily-bar parsing failed: {symbol}") from exc
 
         bars.sort(key=lambda bar: bar.trading_date)
         return bars[-100:] if output_size == "compact" else bars
@@ -215,7 +215,7 @@ class FinnhubDataSource:
     ) -> CompanyFundamentals:
         metric = payload.get("metric")
         if not isinstance(metric, Mapping):
-            raise FinnhubError("Finnhub 基本面响应缺少 metric")
+            raise FinnhubError("Finnhub fundamentals response is missing metric")
 
         try:
             return CompanyFundamentals(
@@ -237,7 +237,7 @@ class FinnhubDataSource:
                 received_at=datetime.now(UTC),
             )
         except (ValueError, ValidationError) as exc:
-            raise FinnhubError(f"Finnhub 基本面解析失败：{symbol}") from exc
+            raise FinnhubError(f"Finnhub fundamentals parsing failed: {symbol}") from exc
 
     @staticmethod
     def _latest_period(value: object) -> date | None:
@@ -282,7 +282,7 @@ class FinnhubDataSource:
     ) -> Sequence[object]:
         value = payload.get(key)
         if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-            raise FinnhubError(f"Finnhub 日线字段 {key!r} 不是数组")
+            raise FinnhubError(f"Finnhub daily-bar field {key!r} is not an array")
         return value
 
     @staticmethod
@@ -290,34 +290,34 @@ class FinnhubDataSource:
         try:
             parsed = Decimal(str(value))
         except (InvalidOperation, ValueError) as exc:
-            raise ValueError(f"无效数值：{value!r}") from exc
+            raise ValueError(f"Invalid numeric value: {value!r}") from exc
         if not parsed.is_finite():
-            raise ValueError(f"数值必须有限：{value!r}")
+            raise ValueError(f"Numeric value must be finite: {value!r}")
         return parsed
 
     @staticmethod
     def _to_volume(value: object) -> int:
         parsed = FinnhubDataSource._to_decimal(value)
         if parsed < 0 or parsed != parsed.to_integral_value():
-            raise ValueError(f"无效成交量：{value!r}")
+            raise ValueError(f"Invalid volume: {value!r}")
         return int(parsed)
 
     @staticmethod
     def _validate_output_size(output_size: str) -> None:
         if output_size not in ("compact", "full"):
-            raise ValueError("output_size 必须是 'compact' 或 'full'")
+            raise ValueError("output_size must be 'compact' 或 'full'")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
         normalized = symbol.strip().upper()
         if not _SYMBOL_PATTERN.fullmatch(normalized):
-            raise ValueError("股票代码格式无效")
+            raise ValueError("Invalid stock symbol format")
         return normalized
 
     @staticmethod
     def _validate_base_url(base_url: str) -> None:
         parsed = urlsplit(base_url)
         if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_API_HOSTS:
-            raise ValueError("Finnhub API 地址必须是 https://finnhub.io")
+            raise ValueError("Finnhub API URL must be https://finnhub.io")
         if parsed.username is not None or parsed.password is not None:
-            raise ValueError("Finnhub API 地址不能包含用户名或密码")
+            raise ValueError("Finnhub API URL must not contain a username or password")

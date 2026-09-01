@@ -1,0 +1,89 @@
+id: CPP_DESTRUCTOR_NEEDS_COPY_MOVE
+enabled: true
+name: "C++ Rule of Five：有析构但缺少拷贝/移动声明"
+severity: warn
+engine_requires: [ast, regex]
+applies_to:
+  languages: [cpp]
+patterns:
+  # 匹配有自定义析构的 class（pattern 命中位置 = 析构签名行）
+  - id: class_with_destructor
+    spec:
+      type: Raw
+      value:
+        pattern: '~\w+\s*\(\s*\)\s*\{'
+  # 文件含 = delete / = default 拷贝/移动声明，或项目内置 DISALLOW 宏 → 已遵循 Rule of Five
+  - id: has_delete_or_default
+    spec:
+      type: Raw
+      value:
+        # 兼容显式 = delete/= default，以及项目常用 DISALLOW_COPY_AND_ASSIGN / BASE_DISALLOW_COPY_AND_ASSIGN 宏
+        # 宏在预处理后展开为 = delete，但 AST 看到的是宏调用，需要按字符串识别
+        pattern: '=\s*(delete|default)\s*|DISALLOW_COPY_AND_ASSIGN|DISALLOW_COPY_AND_MOVE|MOJODISALLOW_COPY_AND_ASSIGN|BASE_DISALLOW'
+  # 文件含显式定义的 copy/move ctor 或 assignment（用户实现的 Rule of Five）
+  # 匹配：Foo(const Foo&) / Foo(Foo&&) / operator=(const Foo&) / operator=(Foo&&)
+  - id: has_explicit_copy_or_move
+    spec:
+      type: Any
+      value:
+        # Foo(const Foo&...) / Foo(Foo&&...) 形式的拷贝/移动构造
+        - { type: Raw, value: { pattern: '\b\w+\s*\(\s*const\s+\w+\s*&' } }
+        - { type: Raw, value: { pattern: '\b\w+\s*\(\s*\w+\s*&&' } }
+        # operator=(const Foo&...) / operator=(Foo&&...) 形式的拷贝/移动赋值
+        - { type: Raw, value: { pattern: 'operator\s*=\s*\(\s*const\s+\w+\s*&' } }
+        - { type: Raw, value: { pattern: 'operator\s*=\s*\(\s*\w+\s*&&' } }
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+    # 文件必须不含 = delete/= default（否则已遵循 Rule of Five）
+    - kind: NotHas
+      node: has_delete_or_default
+    # 文件必须不含显式 copy/move 实现（否则已遵循 Rule of Five）
+    - kind: NotHas
+      node: has_explicit_copy_or_move
+    # 析构体必须不匹配平凡 pattern（empty / 仅 logging）→ 才视为需要 Rule of Five
+    # 平凡析构（无资源管理）不强制 Rule of Five
+    - kind: DestructorBodyMatches
+      body_patterns:
+        # 析构体内全是 logging / 状态计数 / 空 → 平凡
+        # 不匹配任一 → 报 issue（非平凡析构需 Rule of Five）
+        - '(HYLog|HYLogInfo|HYLogDebug|HYLogWarn|HYLogError|log_info|log_debug|log_warn|log_error|log_fault|NSLog|spdlog|uiprov_info|console_log|printf)'
+        - '\w+\s*<<'  # stream 输出（任意 logger，右侧可为字符串字面量/identifier/数字）
+        - '^\s*\w+\s*(\+\+|--)\s*;\s*$'  # 简单状态计数（count++; count--;）
+meta:
+  rationale: |
+    有自定义析构函数的 class 应遵循 Rule of Five。
+    此规则通过 DestructorBodyMatches condition 声明式过滤"平凡析构"（无资源管理），
+    避免硬编码 rule_of_five_safe 后处理逻辑。
+
+    例外（不强制 Rule of Five）：
+    1. 文件已含 `= delete` 或 `= default` 拷贝/移动声明（已遵循）
+    2. 文件含显式实现的 copy/move ctor 或 assignment（用户实现的 Rule of Five）
+    3. 析构体为空 `~Foo() {}`（无资源管理）
+    4. 析构体仅含 logging 调用（debug 析构）
+    5. 析构体仅含简单状态计数（count++ / count--）
+
+    DestructorBodyMatches 将上述平凡析构识别为无需补充 Rule of Five 的安全场景，
+    任一匹配则跳过该 issue。
+  fix_suggestion: "= default 或 = delete 拷贝构造/赋值/移动构造/赋值"
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：从析构函数 ~Foo() 提取类名，在类中追加 Rule of Five 4 行声明
+  # 关键：保留原析构函数（不重复原行），只在下方新增 4 行声明
+  fix_suggestion_template:
+    template: |
+      // {{class_name}} 有自定义析构但未声明 Rule of Five，易导致拷贝/移动语义不一致
+      // 在类定义中新增 Rule of Five 声明（原析构函数保持不变）：
+      + {{indent}}{{class_name}}(const {{class_name}}&) = delete;
+      + {{indent}}{{class_name}}& operator=(const {{class_name}}&) = delete;
+      + {{indent}}{{class_name}}({{class_name}}&&) noexcept = default;
+      + {{indent}}{{class_name}}& operator=({{class_name}}&&) noexcept = default;
+    extractors:
+      class_name:
+        from: issue_line
+        regex: '~(\w+)\s*\('
+        group: 1
+        default: 'Foo'
+  references: ["CWE-781", "C++ Core Guidelines C.21"]
+  tapd_ids: ["1070112211158305859", "1070112211161646307", "1070112211161646339"]
+  tags: [cpp, rule_of_five, context_aware_suggestion]

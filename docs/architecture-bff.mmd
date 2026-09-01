@@ -1,0 +1,40 @@
+flowchart LR
+    U[用户浏览器]
+
+    subgraph WEB["Web 前端 / BFF（新增 web/）"]
+        MW[访问中间件<br/>会话校验 / CSRF / 安全头 / Request ID]
+        UI[Next.js 页面<br/>Server Components + 少量 Client Components]
+        BFF[BFF Route Handlers<br/>参数校验 / API 聚合 / 错误转换]
+        CLIENT[FastAPI Client<br/>Bearer 注入 / 超时 / Trace ID]
+    end
+
+    subgraph BACKEND["现有 FastAPI 后端（尽量不改）"]
+        API["/api/v1"]
+        AUTH[Bearer Token 认证]
+        THESIS[Thesis API]
+        EVENT[Event API]
+        MONITOR[确定性监控服务]
+        REPO[SQLAlchemy Repository]
+    end
+
+    DB[(PostgreSQL)]
+    PROVIDERS[Alpha Vantage<br/>Finnhub<br/>Yahoo Finance]
+    INGEST[现有 CLI / Cron 采集]
+
+    U -->|同源 HTTPS| MW
+    MW --> UI
+    UI --> BFF
+    BFF --> CLIENT
+    CLIENT -->|服务端 Bearer Token| API
+
+    API --> AUTH
+    AUTH --> THESIS
+    AUTH --> EVENT
+    THESIS --> MONITOR
+    THESIS --> REPO
+    EVENT --> REPO
+    MONITOR --> REPO
+    REPO --> DB
+
+    PROVIDERS --> INGEST
+    INGEST --> DB

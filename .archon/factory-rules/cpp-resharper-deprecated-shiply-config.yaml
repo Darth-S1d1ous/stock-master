@@ -1,0 +1,102 @@
+# Shiply 配置读取禁止使用废弃旧接口（GetStringValue / NetConfigBool）
+# TAPD Bug 1070112211161646323：conversation_biz_service / network_detect_biz_model 废弃 Shiply 接口迁移
+id: CPP_RESHARPER_DEPRECATED_SHIPLY_CONFIG
+enabled: true
+name: "C++ Shiply 配置禁止使用废弃 GetStringValue / NetConfigBool 接口"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  # 排除 NetworkConfigService / NetworkConfigItem 实现层自身：
+  # 这些文件是实现废弃 API 的新包装层（NetworkConfigItem<T,R>），内部必须调用旧 API
+  exclude_glob:
+    - "**/network_config_item_impl.cc"
+    - "**/network_config_item.h"
+    - "**/network_config_service_impl.cc"
+    - "**/network_config_service_impl.h"
+    - "**/network_config_service.h"
+patterns:
+  - id: deprecated_shiply_api
+    spec:
+      type: Any
+      value:
+        - { type: MethodCall, value: { method: "GetStringValue" } }
+        - { type: Call, value: { name: "NetConfigBool" } }
+        - { type: MethodCall, value: { method: "NetConfigBool" } }
+        - { type: Call, value: { name: "NetConfigInt" } }
+        - { type: MethodCall, value: { method: "NetConfigInt" } }
+        - { type: Call, value: { name: "NetConfigString" } }
+        - { type: MethodCall, value: { method: "NetConfigString" } }
+        - { type: Call, value: { name: "QueryNetworkConfigService" } }
+  - id: new_shiply_api
+    spec: { type: MethodCall, value: { method: "Get", receiver_name: "ShiplyConfig" } }
+conditions:
+  all:
+    - kind: NotHas
+      node: new_shiply_api
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    Shiply 配置读取的旧接口（NetworkConfigService::GetStringValue / NetConfigBool /
+    NetConfigInt / NetConfigString / QueryNetworkConfigService）已被项目标记为 deprecated，
+    ReSharper InspectCode / CodeDog 在 PR 阶段会扫到并告警。
+
+    旧接口存在 3 个工程性问题：
+    1. 字符串 key 散落在业务代码里，没有 owner / description，无法被 Shiply 平台治理
+    2. 不走 AB 实验自动曝光链路
+    3. 不支持 mock 注入，单测无法覆盖配置变化分支
+
+    统一替代 API：
+      读取：DTMP::ShiplyConfig::Get(DTMP::ABKit::kKey)
+      监听：DTMP::ABKit::kKey.Observe(scope, callback)
+      定义：ABKeyAutoExposure<T> 在 abkit/config_keys/<domain>_keys.h
+
+    key 集中化让团队能：
+    - 在一处看到所有 Shiply key 及 owner
+    - 通过 ABKIT_MOCK_NORMAL_KEY 支持单测
+    - AB 实验数据自动上报到 Shiply 平台
+
+    本规则的最大价值是把外部静态扫描告警前置到 CI：
+    - CodeDog 通常在 daily / pre-release 跑，发现问题滞后
+    - ast-grep 在 PR 阶段就能拦截，避免事后补救
+  fix_suggestion: |
+    // Step 1: 在 abkit/config_keys/<domain>_keys.h 声明 key
+    extern DTMP_API ABKeyAutoExposure<bool> kMyFlag;
+
+    // Step 2: 在 abkit/register/domains/<domain>_keys.cc 定义 + 注册
+    ABKeyAutoExposure<bool> kMyFlag{"my.domain.flag", false};
+    ABKIT_MOCK_NORMAL_KEY(kMyFlag, ABKitDescMeta{...})
+
+    // Step 3: 业务代码读取
+    auto val = DTMP::ShiplyConfig::Get(DTMP::ABKit::kMyFlag);
+    DTMP::ABKit::kMyFlag.Observe(scope, [this](){ OnChanged(); });
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律（TAPD 1070112211161646323 MR diff）：
+  # - QueryNetworkConfigService 获取句柄 + config->GetXxxValue(key) 读取配置 → 整体迁移为 ShiplyConfig::Get
+  # - 简单 GetStringValue(key, default) 调用 → 直接替换为 ShiplyConfig::Get(kMyKey)
+  # - 获取句柄场景（auto config = QueryNetworkConfigService()）→ 不替换本行，
+  #   而是提示后续 config->GetXxxValue 调用需迁移
+  # 关键：保留原行（不删除），下方给出迁移步骤，避免 + 行与 - 行相同的无效 diff
+  fix_suggestion_template:
+    template: |
+      // {{api_name}} 已废弃，迁移到 ABKit key + ShiplyConfig::Get
+      // 3 步迁移（保留原行，在下方按步骤重构）：
+      //   1) config_keys/<domain>_keys.h 声明 ABKIT_DEFINE_KEY
+      //   2) abkit_register_macros.h 注册 ABKIT_REGISTER_NORMAL
+      //   3) 业务读取改为 DTMP::ShiplyConfig::Get(DTMP::ABKit::kMyKey)
+      // 原行（保持不变）：
+      //   {{original_line}}
+      // 迁移后（按 API 类型分两种）：
+      //   - 若是 config->GetStringValue(key, default) 读取 → 替换为 DTMP::ShiplyConfig::Get(DTMP::ABKit::kMyKey)
+      //   - 若是 auto config = QueryNetworkConfigService() 获取句柄 → 后续 config->GetXxxValue 调用需迁移
+      //     （QueryNetworkConfigService 句柄本身保留，仅迁移读取调用）
+    extractors:
+      api_name:
+        from: issue_line
+        regex: '(GetStringValue|NetConfigBool|NetConfigInt|NetConfigString|QueryNetworkConfigService)'
+        group: 1
+        default: deprecated Shiply API
+  references: []
+  tapd_ids: ["1070112211161646323"]
+  tags: [cpp, deprecated, code_quality, shiply, abkit, reshaper, context_aware_suggestion]

@@ -278,11 +278,23 @@ pip install -r requirements.txt
 
 Configure local secrets in `.env`. Never commit this file.
 
-When PostgreSQL is available, apply migrations with:
+When PostgreSQL is available, apply migrations and start the API with:
 
 ```bash
 alembic upgrade head
+uvicorn app.main:app --reload
 ```
+
+The protected Next.js web console lives in `web/`. Configure its server-only environment and start it separately:
+
+```bash
+cd web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Set `BACKEND_API_TOKEN` to the same secret as the backend `API_BEARER_TOKEN`. `WEB_ADMIN_PASSWORD` and `WEB_SESSION_SECRET` protect browser access; none of these values are exposed to client-side JavaScript.
 
 This project is under active development and is not financial advice or a trading system.
 
@@ -568,10 +580,22 @@ pip install -r requirements.txt
 
 在 `.env` 中配置本地密钥，禁止提交该文件。
 
-PostgreSQL 可用时执行迁移：
+PostgreSQL 可用时执行迁移并启动 API：
 
 ```bash
 alembic upgrade head
+uvicorn app.main:app --reload
 ```
+
+受保护的 Next.js Web 控制台位于 `web/`，复制服务端环境变量模板后单独启动：
+
+```bash
+cd web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+`BACKEND_API_TOKEN` 应与后端的 `API_BEARER_TOKEN` 保持一致。`WEB_ADMIN_PASSWORD` 和 `WEB_SESSION_SECRET` 用于保护浏览器访问，以上值均不会暴露给客户端 JavaScript。
 
 项目仍在积极开发中，不构成投资建议，也不是自动交易系统。

@@ -1,0 +1,87 @@
+# C++ 不必要 copy（按值传递改 const 引用）
+# TAPD Bug 1070112211161543946：49 条 CodeDog 自动提单（全部 fix_perfect）
+id: CPP_UNNECESSARY_COPY_USE_CONST_REF
+enabled: true
+name: "C++ 不必要 copy：大对象局部变量 / 函数签名必须用 const 引用"
+severity: warn
+engine_requires: [regex]
+applies_to:
+  languages: [cpp]
+patterns:
+  # 用 Raw 复合模式匹配函数参数中按值传递的大对象
+  # 设计 §6.2.3：Raw 模式用于跨节点/多行 C++ 函数签名匹配
+  - id: vector_param_by_value
+    spec:
+      type: Raw
+      value:
+        pattern: 'std::vector<[^>]+>\s+\w+\s*[),]'
+  - id: string_param_by_value
+    spec:
+      type: Raw
+      value:
+        pattern: 'std::string\s+\w+\s*[),]'
+  - id: map_param_by_value
+    spec:
+      type: Raw
+      value:
+        pattern: 'std::(?:unordered_)?map<[^>]+>\s+\w+\s*[),]'
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    CodeDog / clang-tidy 检测到 C++ 代码中存在不必要拷贝——函数返回值或局部
+    变量按值拷贝了大对象（如 std::vector / std::string / std::unordered_map），
+    应改为 const 引用以避免拷贝开销。
+
+    DTMP C++ ViewModel / BizModel 层的 getter 方法返回值按值拷贝，每次调用都
+    产生一次不必要的对象拷贝。在大规模调用场景下影响性能。
+
+    CodeDog 等价检查：performance-unnecessary-copy-initialization
+
+    历史命中：49 条 CodeDog 自动提单（全部 fix_perfect），分布广泛，主要在
+    DTMP ViewModel / BizModel 层。
+  fix_suggestion: |
+    # 模式 1：局部变量按值 → const 引用
+    - auto need_load_list = home_tab_service->GetNeedLoadList();
+    + const auto& need_load_list = home_tab_service->GetNeedLoadList();
+
+    # 模式 2：API 签名按值返回 → const 引用返回
+    - RecommendCardCurPage GetCurCardPage();
+    + const RecommendCardCurPage& GetCurCardPage() const;
+
+    # 模式 3：函数参数按值 → const 引用
+    - void ProcessData(std::vector<Item> items);
+    + void ProcessData(const std::vector<Item>& items);
+    #exclude: std::move, std::forward, sink_by_move, constructor_init
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：用 replace_with 把 `std::vector<Item> items` 子串
+  # 替换为 `const std::vector<Item>& items`，保留原行的 void / 函数名 / 括号 / 逗号等上下文。
+  fix_suggestion_template:
+    template: |
+      // {{type_name}} {{var_name}} 按值传递，产生多余深拷贝
+      - {{original_line}}
+      + {{fixed_line}}
+    extractors:
+      type_name:
+        from: issue_line
+        regex: '(std::(?:string|vector<[^>]+>|map<[^>]+>|set<[^>]+>|unordered_map<[^>]+>))'
+        group: 1
+        default: 'std::string'
+      var_name:
+        from: issue_line
+        regex: '(std::(?:string|vector<[^>]+>|map<[^>]+>|set<[^>]+>|unordered_map<[^>]+>))\s+(\w+)\s*[),]'
+        group: 2
+        default: 'param'
+      fixed_line:
+        from: issue_line
+        # 匹配 `std::vector<Item> items` / `std::string x` / 等按值参数声明子串
+        # group1=std::type，group2=变量名
+        # replace_with 把 `std::vector<Item> items` 替换为 `const std::vector<Item>& items`
+        # 保留原行的 void / 函数名 / ( / , / ) / ; 等上下文
+        regex: '(std::(?:string|vector<[^>]+>|map<[^>]+>|set<[^>]+>|unordered_map<[^>]+>))\s+(\w+)'
+        replace_with: 'const ${1}& ${2}'
+  references: ["clang-tidy:performance-unnecessary-copy-initialization"]
+  tapd_ids: ["1070112211161543946"]
+  tags: [cpp, performance, code_quality, copy, const_ref, codedog, file_keyword_exclude, sink_by_move_safe, context_aware_suggestion]

@@ -1,0 +1,106 @@
+# 客户端代码禁止硬编码测试环境裸 IP
+# TAPD Bug 1070112211161674454
+id: NO_HARDCODED_TEST_IP_IN_PRODUCTION
+enabled: true
+name: "客户端代码禁止硬编码测试环境裸 IPv4 字面量"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [cpp, objc, kotlin, java]
+  # 排除第三方库文件（AsyncSocket/GCDAsyncSocket 是 CocoaAsyncSocket 第三方库，
+  # 文档示例含 192.168.x.x 注释 IP）
+  # 排除 tests 目录（test_runtime.cc 等单元测试文件，IP 用于 mock 不是生产代码）
+  # 注意：不用 *_test_* 等过宽 glob，避免误伤 "no_hardcoded_test_ip_xxx.java" 这类命名
+  exclude_glob:
+    - "**/WMGCDAsyncSocket*"
+    - "**/GCDAsyncSocket*"
+    - "**/AsyncSocket*"
+    - "**/tests/**"
+    - "**/test/**"
+    - "**/__tests__/**"
+    - "**/unittest/**"
+    - "**/UnitTest/**"
+patterns:
+  - id: ipv4_literal
+    spec:
+      type: Raw
+      value:
+        # IPv4 字面量：每个 octet 必须 0-255（排除版本号如 10.5.0.300）
+        # 第一个 octet 必须 ≥10（排除 0-9 开头的 4 段数字，如版本号 3.4.1.1）
+        # 排除 127.0.0.0/8 (loopback)、255.255.255.255 (broadcast) 由 localhost_literal 处理
+        # 0-255 octet 模式：25[0-5] | 2[0-4]\d | 1\d{2} | [1-9]\d | \d
+        # 第一个 octet ≥10：25[0-5] | 2[0-4]\d | 1\d{2} | [1-9]\d
+        pattern: '(?:^|[^.\d])((?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d)\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2})\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2})\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2}))(?:[^.\d]|$)'
+  - id: setcached_ip
+    spec: { type: MethodCall, value: { method: "setCachedIP:forHost:" } }
+  - id: dtmp_test_ip_const
+    spec: { type: Raw, value: { pattern: 'kYBTestServerIp' } }
+  - id: localhost_literal
+    spec:
+      type: Raw
+      value:
+        # localhost / loopback / broadcast / 0.0.0.0 — 这些不是测试 IP，文件含则全文件跳过
+        pattern: '127\.0\.0\.1|0\.0\.0\.0|255\.255\.255\.255|localhost'
+  - id: dev_compile_branch
+    spec:
+      type: Raw
+      value:
+        # DEV/DEBUG/TEST 编译分支：IP 仅在 dev 构建中生效，release 移除 → 整文件跳过
+        pattern: '#if\s+(?:NOT_PUBLISH_RELEASE|DEBUG|DEV|TEST_ENV|ENABLE_DEBUG_ABILITY|TEST|INTERNAL)'
+  - id: public_dns_ip
+    spec:
+      type: Raw
+      value:
+        # 公共 DNS 服务 IP（不是测试 IP，是公共服务）— 文件含则跳过该 issue
+        # 腾讯 DNSPod HttpDNS: 119.29.29.29 / 119.29.29.94 / 119.28.28.28 / 119.28.28.94 / 119.28.29.29
+        # Google DNS: 8.8.8.8 / 8.8.4.4
+        # 114DNS: 114.114.114.114 / 114.114.115.115
+        # AliDNS: 223.5.5.5 / 223.6.6.6
+        # 百度 DNS: 180.76.76.76
+        # 阿里 HTTPDNS: 223.5.5.5
+        pattern: '119\.(29|28)\.(29|28)\.\d{1,3}|8\.8\.[48]\.[48]|114\.114\.11[45]\.11[45]|223\.[56]\.[56]\.[56]|180\.76\.76\.76'
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/{DTMP,dtmp,App,app,infra,services,utils,net,domain,commons,biz,foundation}/**"
+    # 文件含 localhost / 127.0.0.1 / 0.0.0.0 / 255.255.255.255 时全文件跳过
+    - kind: NotHas
+      node: localhost_literal
+    # 文件含 DEV/DEBUG 编译分支时全文件跳过（release 编译移除）
+    - kind: NotHas
+      node: dev_compile_branch
+    # 文件含公共 DNS IP 时全文件跳过（不是测试 IP）
+    - kind: NotHas
+      node: public_dns_ip
+meta:
+  rationale: |
+    源码中硬编码 IPv4 字面量有以下风险：即使被 #ifdef 包裹，字面量仍进入 Release 二进制段。
+    文件级排除关键词：含 ENABLE_DEBUG_ABILITY 的文件跳过（release 编译移除）。
+
+    白名单：
+    - 127.0.0.0/8（loopback 本地回环）
+    - 0.0.0.0（任意地址 / 监听默认）
+    - 255.255.255.255（broadcast 广播）
+    - localhost 字符串
+    - 第三方库文件（WMGCDAsyncSocket / GCDAsyncSocket / AsyncSocket — CocoaAsyncSocket 库）
+  fix_suggestion: |
+    const val HOST = "https://api-test.yuanbao.tencent.com"
+    #exclude: ENABLE_DEBUG_ABILITY, 127.0.0.1, 0.0.0.0, 255.255.255.255, localhost
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律（TAPD 1070112211161674454）：正式包中去掉测试 IP，改为非固定配置动态读取。
+  # 泛化提示：不指定具体变量名/配置项，让开发者按实际环境架构选择。
+  fix_suggestion_template:
+    template: |
+      // 硬编码测试 IP {{ip_address}} 会进入 Release 二进制段
+      // 应替换为非固定配置（如编译时注入 / 配置中心 / 环境变量），避免 IP 泄露
+      // 当前行（需修改）：
+      //   {{original_line}}
+    extractors:
+      ip_address:
+        from: issue_line
+        regex: '((?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d)\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2})\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2})\.(?:25[0-5]|2[0-4]\d|1\d{2}|\d{1,2}))'
+        group: 1
+        default: '<IP>'
+  references: ["CWE-200"]
+  tapd_ids: ["1070112211161674454"]
+  tags: [security, config, cross_platform, ip_literal, file_keyword_exclude, context_aware_suggestion]

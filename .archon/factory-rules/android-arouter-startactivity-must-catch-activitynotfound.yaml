@@ -1,0 +1,61 @@
+# ARouter startActivity 必须捕获 ActivityNotFoundException
+# TAPD Bug 1070112211160390762：_ARouter.startActivity 未捕获 ActivityNotFoundException 致主线程 Crash
+id: ANDROID_AROUTER_STARTACTIVITY_MUST_CATCH
+enabled: true
+name: "Android ARouter startActivity 必须包 try-catch ActivityNotFoundException"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [java, kotlin]
+patterns:
+  # 只匹配 ARouter 相关的 startActivity 调用（限定 receiver 为 ARouter/context/ActivityCompat）
+  # 避免误匹配业务代码中 context.startActivity(intent) 等标准 Android 调用
+  - id: arouter_start
+    spec:
+      type: Any
+      value:
+        - { type: MethodCall, value: { method: "startActivity", receiver_name: "{ARouter,ARouterInstance,_ARouter,ActivityCompat,Navigation}" } }
+        - { type: MethodCall, value: { method: "startActivityForResult", receiver_name: "{ARouter,ARouterInstance,_ARouter,ActivityCompat,Navigation}" } }
+        # navigation(Class<T>) 重载是服务查询（返回 T service），不会触发 startActivity，
+        # 用 negative_args 排除 `::class.java` / `Class<...>` 参数形式。
+        - { type: MethodCall, value: { method: "navigation", receiver_name: "{ARouter,ARouterInstance,_ARouter,Postcard}", negative_args: ["::class\\.java", "Class<"] } }
+  - id: try_catch_activity_not_found
+    spec:
+      type: Raw
+      value:
+        pattern: 'catch\s*\(\s*[\w.]*ActivityNotFoundException'
+conditions:
+  all:
+    - kind: NotHas
+      node: try_catch_activity_not_found
+meta:
+  rationale: |
+    ARouter 作为统一路由收口，底层 ActivityCompat.startActivity / startActivityForResult
+    在目标 Activity 未注册或路由表与 Manifest 不一致时会抛 ActivityNotFoundException。
+    收口必须保证："路由失败也不崩溃"——这是 ARouter API 设计的隐含契约。
+  fix_suggestion: |
+    try { ARouter.getInstance().navigation(path); }
+    catch (ActivityNotFoundException ex) { callback.onLost(postcard); }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：ARouter.startActivity 未捕获 ActivityNotFoundException → 主线程 Crash
+  # 建议包 try-catch ActivityNotFoundException（catch 块具体处理由业务决定，不硬编码）
+  # 泛化：catch 块用注释占位，提示开发者按业务处理（如降级 UI / 上报 / fallback）
+  fix_suggestion_template:
+    template: |
+      // ARouter.startActivity 未捕获 ActivityNotFoundException → 主线程 Crash
+      // 包 try-catch，catch 块按业务处理（降级 UI / 上报 / fallback 等）：
+      - {{original_line}}
+      + {{indent}}try {
+      + {{indent}}    {{navigation_call}}
+      + {{indent}}} catch (ActivityNotFoundException e) {
+      + {{indent}}    // TODO: 按业务处理目标 Activity 不存在的场景（如降级 UI / 上报 / fallback）
+      + {{indent}}}
+    extractors:
+      navigation_call:
+        from: issue_line
+        regex: '(\w+\.\w+\(.*\)\.\w+\(.*\)|\w+\.\w+\(.*\))'
+        group: 1
+        default: 'ARouter.getInstance().navigation(path)'
+  references: []
+  tapd_ids: ["1070112211160390762"]
+  tags: [android, arouter, crash, routing, context_aware_suggestion]

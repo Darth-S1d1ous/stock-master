@@ -1,0 +1,60 @@
+# unregisterScreenCaptureCallback 必须先判断已注册并 try-catch IllegalStateException
+# TAPD Bug 1070112211160347670：BaseConversationFragment 截屏 callback 未注册时 unregister 崩溃
+id: ANDROID_UNREGISTER_MUST_GUARD_ILLEGALSTATE
+enabled: true
+name: "Android unregisterScreenCaptureCallback 必须包 try-catch IllegalStateException"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [kotlin]
+patterns:
+  - id: unregister_screen_capture
+    spec: { type: MethodCall, value: { method: "unregisterScreenCaptureCallback" } }
+  - id: try_catch_illegal_state
+    spec:
+      type: Raw
+      value:
+        pattern: 'catch\s*\(\s*[\w.]*IllegalStateException'
+conditions:
+  all:
+    - kind: NotHas
+      node: try_catch_illegal_state
+    - kind: ClassScope
+      class_glob: "*Fragment*"
+meta:
+  rationale: |
+    Android 14+ 的 Activity.unregisterScreenCaptureCallback 是非幂等 API：
+    如果 callback 未注册 / 已注销 / 注册在另一个 Activity 上，会抛
+    IllegalStateException("Capture observer not registered with the activity")，
+    导致 Fragment.onPause / onDestroy 崩溃。
+
+    类似的非幂等 unregister API 还有：
+    - LocalBroadcastManager.unregisterReceiver
+    - Context.unregisterReceiver（ComponentName 不匹配时）
+    - SensorManager.unregisterListener（不会抛但无效）
+    - NotificationManager.cancel
+
+    标准修复模式：
+    1. 用字段记录注册状态（registerXxxCallbackActivity）
+    2. register 时先判断已注册 → 幂等
+    3. unregister 时先判断已注册 → 未注册直接 return
+    4. unregister 调用包 try-catch(IllegalStateException)
+    5. finally 清理状态
+  fix_suggestion: |
+    // 在报告的方法 {{method_name}} 内，把 unregisterScreenCaptureCallback 调用
+    // 包成幂等 + try-catch(IllegalStateException) + finally 清理：
+    override fun {{method_name}}() {
+        val activity = registerActivityRef ?: return   // 未注册直接 return（幂等）
+        val callback = registerCallbackRef ?: return
+        try {
+            activity.unregisterScreenCaptureCallback(callback)
+        } catch (e: IllegalStateException) {
+            // Android 14+ 非 Activity 注册时抛 IllegalStateException，吞掉
+        } finally {
+            registerActivityRef = null
+            registerCallbackRef = null
+        }
+    }
+  references: []
+  tapd_ids: ["1070112211160347670"]
+  tags: [android, kotlin, crash, illegalstate, lifecycle, fragment, context_aware_suggestion]

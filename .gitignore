@@ -24,6 +24,9 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+node_modules/
+.next/
+*.tsbuildinfo
 
 # IDE
 .idea/

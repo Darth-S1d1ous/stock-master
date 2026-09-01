@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.dependencies import get_api_security_settings
+from app.api.routes.events import router as events_router
 from app.api.routes.theses import router as theses_router
 from app.database.session import close_database_engine
 
@@ -41,6 +42,7 @@ app = FastAPI(
 )
 
 app.include_router(theses_router, prefix="/api/v1")
+app.include_router(events_router, prefix="/api/v1")
 
 @app.get(
     "/health/live",

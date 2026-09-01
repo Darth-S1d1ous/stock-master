@@ -1,0 +1,20 @@
+id: JAVA_CYCLOMATIC_COMPLEXITY_THRESHOLD
+enabled: true
+name: "Java 单方法圈复杂度大于 20"
+severity: warn
+applies_to:
+  languages: [java]
+engine_requires: [ast]
+conditions:
+  all:
+    - kind: Count
+      count_kind: cyclomatic_complexity
+      op: at_least
+      threshold: 21
+meta:
+  rationale: |
+    圈复杂度等于方法内决策路径数加一。大于 20 的方法难以测试和维护，
+    应按职责拆分条件判断、循环和异常处理。
+  fix_suggestion: "当前函数圈复杂度超过 20 阈值，需要优化；保留原方法入口，将独立判断和处理分支提取为语义明确的私有方法。"
+  references: ["McCabe cyclomatic complexity"]
+  tags: [java, code_quality, cyclomatic_complexity, ast]

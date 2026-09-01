@@ -1,0 +1,103 @@
+# iOS Block Self Nil — @strongify(self) 后必须有 self nil 守卫
+# task 219：用 NotHas pattern（双 pattern）实现文件级检查
+id: IOS_BLOCK_MUST_CHECK_SELF_NIL
+enabled: true
+name: "iOS block @strongify(self) 后需检查 self == nil"
+severity: error
+engine_requires: [ast]
+applies_to:
+  languages: [objc]
+patterns:
+  # tree-sitter-objc 将 @strongify(self) 解析为 at_expression 下的 call_expression。
+  # capture predicate 同时限定宏名和首个参数，排除 @strongify(context)。
+  - id: strongify_self
+    spec:
+      type: TreeSitterQuery
+      value:
+        source: |
+          (
+            (at_expression
+              (call_expression
+                function: (identifier) @macro
+                arguments: (argument_list (identifier) @argument))) @strongify
+            (#eq? @macro "strongify")
+            (#eq? @argument "self")
+          )
+        focus_capture: strongify
+  - id: self_nil_check
+    spec:
+      type: TreeSitterQuery
+      value:
+        source: |
+          (
+            (if_statement
+              condition: (parenthesized_expression) @condition) @guard
+            (#match? @condition "(^|[^A-Za-z0-9_])(self|strongSelf|weakSelf|strong_self)([^A-Za-z0-9_]|$)")
+          )
+        focus_capture: guard
+conditions:
+  all:
+    - kind: NotHas
+      node: self_nil_check
+meta:
+  rationale: |
+    @strongify(self) 后 self 可能已释放（weak self 在 strongify 时若已释放，则 strongSelf 为 nil）。
+    tree-sitter query 只识别真实 @strongify(self) 宏节点与 if_statement 条件，
+    注释或字符串中的示例不会满足守卫。文件级 NotHas：文件有 @strongify(self)
+    但缺 self nil 守卫时，报告所有 @strongify(self)。
+
+    排除规则：
+    - @strongify(context) 不报告（context 不是 self，规则本意是 self 守卫）
+    - @strongify(self, context) 仍报告（self 是第一参数）
+  fix_suggestion: |
+    在 @strongify(self) 后立即添加 nil 守卫，然后再访问 self：
+
+    // 当前代码（有风险）：
+    @strongify(self);
+    [self handleFeedbackSubmitWithLikeType:...];  // self 可能为 nil
+
+    // 修复后：
+    @strongify(self);
+    if (!self) return;  // ← 添加这一行
+    [self handleFeedbackSubmitWithLikeType:...];  // 确保 self 非空才访问
+
+    // 原因：@weakify(self) 创建弱引用，@strongify(self) 在 block 执行时
+    // 尝试强引用 self。如果 self 已释放（VC dismiss 后），strongify 后的 self
+    // 为 nil，直接访问会导致方法无响应或数据不一致。
+
+    // 注意：本规则为文件级近似检查。如果 @strongify(self) 后首个 self 访问
+    // 在嵌套 block 或多行之后，守卫应放在首个 self 访问前而非 strongify 后立即。
+    // 如果文件已有任一 if (!self) 守卫，本告警可能为过度告警，可按需抑制。
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：在 @strongify(self) 行后插入 `if (!self) return;`，再保留下一行原代码
+  # next_line 提取 strongify 后第一个非空行（业务代码）
+  fix_suggestion_template:
+    template: |
+      // @strongify(self) 后 self 可能为 nil，需立即加守卫
+      - {{original_line}}
+      - {{next_indent}}{{next_line}}
+      + {{original_line}}
+      + {{next_indent}}if (!self) return;
+      + {{next_indent}}{{next_no_trailing}}
+    extractors:
+      original_line:
+        from: issue_line
+        regex: '^\s*(.*\S)\s*$'
+        group: 1
+      next_line:
+        from: next_line
+        regex: '^\s*(.*\S)\s*$'
+        group: 1
+        default: ''
+      next_indent:
+        from: next_line
+        regex: '^(\s*)'
+        group: 1
+      next_no_trailing:
+        from: next_line
+        regex: '^\s*(.*?)(?:;\s*)?$'
+        group: 1
+        default: ''
+  references: ["CWE-476", "clang-static-analyzer:retain-cycle"]
+  tapd_ids: ["1070112211161113943", "1070112211161033131"]
+  tags: [ios, objc, null_safety, context_aware_suggestion]

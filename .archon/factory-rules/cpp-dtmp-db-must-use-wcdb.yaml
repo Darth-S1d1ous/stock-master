@@ -1,0 +1,208 @@
+# DTMP 数据库范式迁移规则：SQLite 原生范式 → WCDB + DataRouter 范式
+#
+# 语义：这是"整套范式迁移"而非单 API 违规。一个文件 = 一个迁移单元：
+# - 锚点：BASE_DATABASE::SQLiteSqlBuilder::Build* 拼 SQL（旧范式标志）
+# - 聚合：同文件全部命中合并为 1 个迁移 issue（aggregation: per_file）
+# - 证据：evidence_patterns 收集旧范式完整链路特征（db 来源 / 执行入口），
+#   与全部违规行一起作为 evidence.related_points 展示
+# - 建议：迁移到 app_database 范式（Helper + Factory + Handler + Operation 四组件）
+#
+# 新范式参考实现（大仓 chat 业务线）：
+#   services/biz/chat/chat/src/data/storage/app_database/chat_app_message_db_helper.h
+#   services/biz/chat/chat/src/data/storage/app_database/chat_app_message_db_data_route_handler_factory.{h,cc}
+#   services/biz/chat/chat/src/data/storage/app_database/chat_app_query_message_db_handler.h
+#   services/biz/chat/chat/src/data/storage/app_database/chat_app_message_db_operation.{h,cc}
+#
+# 大仓存量迁移单元（本规则上线时的 3 个文件）：
+# - foundation/components/analyser/analytics_storage.cc
+# - services/biz/media/voice_record/db/local_record_data_db_handlers.cc
+# - services/biz/media/voice_record/db/local_record_data_columns_db_handlers.cc
+id: CPP_DTMP_DB_MUST_USE_WCDB
+enabled: true
+name: "DTMP 数据库范式迁移：禁止 SQLite 原生接口（SQLiteSqlBuilder + SQLiteDatabase），必须迁移到 WCDB 范式（SQLiteWCDBHelper + DataRouter + Handler）"
+severity: error
+engine_requires: [regex]
+applies_to:
+  languages: [cpp, c]
+  # 排除第三方库（wcdb SDK 自身、base 库的 SQLiteSqlBuilder 定义）
+  exclude_glob:
+    - "**/third_party/**"
+aggregation: per_file
+patterns:
+  - id: sqlite_sql_builder_call
+    description: SQLite 原生拼 SQL
+    spec:
+      type: Raw
+      value:
+        # 旧范式锚点：BASE_DATABASE::SQLiteSqlBuilder 静态方法调用
+        # （BuildCreateTableSqlIfNotExists / BuildInsertSql / BuildQuerySql /
+        #   BuildUpdateSql / BuildDeleteSql / BuildCountSql 等）
+        pattern: 'BASE_DATABASE::SQLiteSqlBuilder\s*::\s*Build\w+'
+evidence_patterns:
+  - id: legacy_db_open
+    label: 旧范式 db 来源（OpenOrCreate）
+    spec:
+      type: Raw
+      value:
+        pattern: '\bOpenOrCreate\w*\s*\('
+  - id: legacy_get_database
+    label: 旧范式 db 获取（GetDatabase）
+    spec:
+      type: Raw
+      value:
+        pattern: '\bGetDatabase\s*\('
+  - id: legacy_compile_statement
+    label: 旧范式执行入口（CompileStatement）
+    spec:
+      type: Raw
+      value:
+        pattern: '\bCompileStatement\s*\('
+  - id: legacy_execute_query
+    label: 旧范式查询执行（ExecuteQuery）
+    spec:
+      type: Raw
+      value:
+        pattern: '\bExecuteQuery\s*\('
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    DTMP 团队规范：数据库存储必须使用 WCDB 范式，禁止 SQLite 原生接口范式。
+
+    这是整套范式的迁移，不是单个 API 的替换：
+
+    旧范式（禁止，本规则锚点 = SQLiteSqlBuilder 拼 SQL）：
+    - OpenHelper 继承 BASE_DATABASE::SQLiteOpenHelper
+    - 每次操作用 SQLiteSqlBuilder::Build*Sql 手工拼 SQL
+    - db->CompileStatement + Bind* + Execute/ExecuteQuery 同步执行
+    - 无损坏恢复、无统一错误监控，同步调用占用所在 looper
+
+    新范式（推荐，参考 chat 业务线 app_database 实现）：
+    - Helper 继承 DTMP_DATABASE::SQLiteWCDBHelper（WCDB 加密打开 / OnCreateOrUpgrade 建表）
+    - Factory（DataRouter::HandlerFactory + SqliteWCDBDelegate）持有 WCDB::Database，
+      注册 cmd → Handler 映射，OnDBCorrupted 损坏自动恢复，traceError 统一监控
+    - 命令字与结构体（xxx_db_define.h）：每类数据库操作定义一个 DataRouter 命令字
+      （三段式 dataroute:{模块}:{操作}，如 kCmdQueryAppChatMessage）+ 配套 Req/Rsp 结构体
+    - Handler（DefaultWCDBRequestHandler 子类）：每个 cmd 对应一个 Handler 类
+      （每请求新建无状态实例执行），WCDB 接口执行 SQL
+    - Operation 负责 DataRouter 生命周期（CreateDataRouter + DataRouteService + StartService），
+      业务通过 RunDataRouterRequest(cmd, req, callback) 异步路由，回调拿结果
+
+    Looper 参数说明：BASE_DATAROUTER::CreateDataRouter 的 looper 参数为必填（无 API 默认值），
+    惯例推荐 BASE_THREADING::LooperThread::DatabaseLooper()，但 WorkerLooper 等也可接受
+    （chat 业务线用 WorkerLooper），本规则不约束 Looper 选择。
+  fix_suggestion_template:
+    # 上下文感知：当前代码展示实际命中的调用行 + 锚点操作到 WCDB 接口的映射
+    template: |
+      // 当前代码（SQLite 原生接口范式，禁止）：
+      {{original_line}}
+      {{next_line}}
+
+      // 本锚点的迁移映射（{{build_call}} → WCDB 接口）：
+      //   {{build_call}}  →  {{wcdb_api}}
+      //   目标表 {{table_ref}}{{table_ref_multiline}}：列定义 → ORM struct 字段绑定（见第 1 步）
+      //   本文件其余 SqlBuilder 调用点（见"范式证据点"列表）同样按此映射逐个迁移
+      //
+      // 迁移目标：WCDB + DataRouter 范式（四组件，参考实现见
+      // services/biz/chat/chat/src/data/storage/app_database/chat_app_message_db_*）。
+      //
+      // 1) 命令字 + 请求/响应结构体 + Handler（每类数据库操作一套）
+      //    // xxx_db_define.h：定义 DataRouter 命令字（三段式 dataroute:{模块}:{操作}）
+      //    // 和配套 Req/Rsp 结构体（Handler 取请求、Operation 回调拿响应都靠它们）：
+      //    const constexpr char* kCmdQueryRecordList = "dataroute:record_data:query_record_list";
+      //    struct QueryRecordListReq { std::string db_file_path; std::string db_key; ... };
+      //    struct QueryRecordListResp { std::vector<RecordItem> records; };
+      //
+      //    // Handler：每个 cmd 对应一个 Handler 类，SQL 执行全部在 Handler 内完成
+      //    // （WCDB 接口替代 SqlBuilder）
+      //    // xxx_db_handler.h（宏展开 = 继承 DefaultWCDBRequestHandler，
+      //    // 持有 database_（weak_ptr<WCDB::Database>）+ src_req_packet_）：
+      //    DECL_COMMON_DATAROUTER_HANDLER(XxxHandler, DTMP_DATA_ROUTE::DefaultWCDBRequestHandler);
+      //
+      //    // xxx_db_handler.cc — 重写 Run()（真实参考 chat_app_query_message_db_handler.cc）：
+      //    void XxxHandler::Run() {
+      //      auto db = database_.lock();            // WCDB::Database（Factory 打开并注入）
+      //      if (!db) { CallResponse(...kDbEmpty...); return; }
+      //      auto* req = static_cast<XxxReq*>(src_req_packet_->body());
+      //      db->runTransaction([this, db, req](WCDB::Handle& handle) {
+      //        // ORM 查询替代 BuildQuerySql + CompileStatement + Bind*：
+      //        //   条件 = WCDB_FIELD(TXxx::col) == req->value（替代 WHERE 拼接 + BindText/BindInt）
+      //        auto objs = db->getAllObjects<TXxx>({{table_ref}}{{table_ref_multiline}}, WCDB_FIELD(TXxx::col) == req->value);
+      //        auto rsp = base::make_shared<XxxRsp>();  // ... 从 objs 填充 rsp
+      //        CallResponse(BASE_DATAROUTER::CreateDataRouteResponsePacket(kDbSuccess, "", rsp));
+      //        return true;
+      //      });
+      //    }
+      //    // ORM 绑定（替代表列宏 + 手工 Bind 索引）：
+      //    //   struct TXxx { std::string col; int64_t num; WCDB_CPP_ORM_DECLARATION(TXxx); };
+      //    //   WCDB_CPP_SYNTHESIZE_COLUMN(col, "col_name") / WCDB_CPP_SYNTHESIZE_COLUMN(num, "num")
+      //
+      // 2) Factory：打开 WCDB + 注册 cmd → Handler + 损坏恢复
+      //    // xxx_db_data_route_handler_factory.cc Init()：
+      //    XxxDBHelper helper(db_file_path_, db_key_);   // SQLiteWCDBHelper 子类
+      //    helper.OpenDB(this);
+      //    database_ = helper.GetDatabase();             // base::shared_ptr<WCDB::Database>
+      //    database_->traceError([](const WCDB::Error& e) { ... });
+      //    BIND_XXX_DB_REQ_HANDLER(kCmdXxx, XxxHandler);
+      //    // OnDBCorrupted() 中重新 OpenDB 实现损坏自动恢复
+      //
+      // 3) Operation：DataRouter 生命周期 + 异步请求入口
+      //    // xxx_db_operation.cc InitDatabase()：
+      //    auto factory = base::make_unique<XxxDBDataRouteHandlerFactory>(db_path, db_key);
+      //    auto service = base::make_unique<BASE_DATAROUTER::DataRouteService>(std::move(factory));
+      //    router_ = BASE_DATAROUTER::CreateDataRouter(BASE_THREADING::LooperThread::WorkerLooper());
+      //    router_->AddRouteService(std::move(service));
+      //    router_->StartService();
+      //
+      // 4) 业务改写：同步 ExecSQL/ExecuteQuery → 异步路由 + 回调
+      //    RunDataRouterRequest(kCmdXxx, req, [cb](const RouterResult& result) {
+      //      cb(result.ResultCode(), result.Body<XxxRsp>());  // WCDB Handler 内完成 SQL 执行
+      //    });
+      //    SQL 拼接与 Bind* 参数化迁移到 Handler 内的 WCDB 接口
+      //    （getAllObjects / insertObjects / updateObjects / deleteObjects / execute，
+      //      WCDB_FIELD 条件表达式替代 WHERE 拼接，加密与错误监控内建）。
+    extractors:
+      original_line:
+        from: issue_line
+        regex: '^(.*)$'
+        group: 1
+      next_line:
+        from: next_line
+        regex: '^(.*)$'
+        group: 1
+        default: ''
+      # 锚点方法名（如 BuildCountSql / BuildQuerySql），用于映射行与证据关联
+      build_call:
+        from: issue_line
+        regex: '(Build\w+Sql\w*)'
+        group: 1
+        default: 'SQLiteSqlBuilder 调用'
+      # 锚点操作 → WCDB 接口映射（迁移映射行的核心）
+      wcdb_api:
+        from: issue_line
+        regex: '(Build\w+Sql\w*)'
+        lookup:
+          BuildQuerySql: 'db->getAllObjects<TXxx>(表, WCDB_FIELD(TXxx::col) == 值, 排序, limit)'
+          BuildInsertSql: 'db->insertObjects(表, objs)（Bind* 参数 → ORM 字段）'
+          BuildUpdateSql: 'db->updateObjects(表, obj, WCDB_FIELD(TXxx::主键) == 键)'
+          BuildDeleteSql: 'db->deleteObjects(表, WCDB_FIELD(TXxx::col) == 值)'
+          BuildCountSql: 'db->getAllObjects<TXxx>(表, 条件)->size()'
+          BuildCreateTableSqlIfNotExists: 'SQLiteWCDBHelper::OnCreateOrUpgrade 内建表（建表迁移到 Helper，不在 Handler）'
+        default: 'WCDB ORM 接口（getAllObjects / insertObjects / updateObjects / deleteObjects / execute）'
+      # 锚点调用的第一个参数 = 表名（单行调用形态：BuildXxxSql(TABLE, ...)）
+      table_ref:
+        from: issue_line
+        regex: 'Build\w+Sql\w*\(\s*([A-Za-z_][A-Za-z0-9_]*)'
+        group: 1
+        default: ''
+      # 多行调用形态：首参（表名）在锚点行的下一行行首（标识符后跟 , 或 .c_str()）
+      table_ref_multiline:
+        from: next_line
+        regex: '^\s*([A-Za-z_][A-Za-z0-9_]*)(?:\.c_str\(\))?\s*,'
+        group: 1
+        default: ''
+  references: ["DTMP 数据库规范通知 2026-08"]
+  tapd_ids: []
+  tags: [cpp, dtmp, database, wcdb, architecture, paradigm_migration, context_aware_suggestion]

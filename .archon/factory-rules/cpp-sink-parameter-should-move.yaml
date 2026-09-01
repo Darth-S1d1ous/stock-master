@@ -1,0 +1,70 @@
+# C++ sink parameter 漏 move（C3：调用方未 move rvalue 字段）
+# TAPD Bug 1070112211162056423：chat_input_model_select_biz_model_impl.cc:607
+# 反模式：service->Method(args.model_list_json);  // args 是右值但字段被 copy 传入
+# - args.model_list_json 是 std::string（数 KB JSON）
+# - callee Method(...) 第二参 by value（sink）
+# - 调用方未 std::move → 触发深拷贝
+#
+# AST 精确化：sink_parameter_check PostFilter 用 tree-sitter AST 检查：
+# 1. callee 同文件声明中对应参数位置是 std::string/vector/map by value (sink)
+# 2. const& 参数 / 非 heavy 类型 / 外部声明 → drop（避免 FP）
+# 3. 已含 std::move → drop（已修过）
+id: CPP_SINK_PARAMETER_SHOULD_MOVE
+enabled: true
+name: "C++ sink parameter 漏 move：调用方传 args.field 到 sink parameter 时应 std::move"
+severity: warn
+engine_requires: [regex]
+applies_to:
+  languages: [cpp]
+patterns:
+  - id: rvalue_field_arg
+    spec:
+      type: Raw
+      value:
+        pattern: '\b(?:args|params|request|req|input)\.\w+(?:\.\w+)?\s*[,)]'
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    C++ sink parameter 语义：当 callee 函数参数是 by value（sink）时，
+    调用方应该 std::move rvalue 实参。
+
+    TAPD Bug 1070112211162056423：MigrateAgentModelListCache 调用链中
+    model_list_json 是数 KB JSON 串，被 copy 传入 sink → 3 次深拷贝。
+
+    正确写法：
+    ```cpp
+    service->Migrate(ConvertToProjectInfoId(args.project_info_id),
+        std::move(args.model_list_json));
+    ```
+
+    精确化：sink_parameter_check PostFilter 用 AST 检查 callee 声明：
+    - callee 第 N 参是 std::string/vector/map by value (sink) → TP
+    - const& / 非 heavy 类型 / 外部声明 → FP（drop）
+    - 已含 std::move → drop
+  fix_suggestion: |
+    // 当前代码（深拷贝）：
+    service->Migrate(args.id, args.json);
+
+    // 修复后（std::move）：
+    service->Migrate(args.id, std::move(args.json));
+  fix_suggestion_template:
+    template: |
+      // {{arg_expr}} 应 std::move 到 sink parameter
+      - {{original_line}}
+      + {{fixed_line}}
+    extractors:
+      arg_expr:
+        from: issue_line
+        regex: '((?:args|params|request|req|input)\.\w+(?:\.\w+)?)'
+        group: 1
+        default: 'args.field'
+      fixed_line:
+        from: issue_line
+        regex: '((?:args|params|request|req|input)\.\w+(?:\.\w+)?)'
+        replace_with: 'std::move(${1})'
+  references: ["clang-tidy:performance-unnecessary-value-param"]
+  tapd_ids: ["1070112211162056423"]
+  tags: [cpp, performance, code_quality, copy, sink_parameter, std::move, sink_parameter_check, context_aware_suggestion]

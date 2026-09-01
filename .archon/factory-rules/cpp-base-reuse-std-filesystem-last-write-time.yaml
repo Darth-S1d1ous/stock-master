@@ -1,0 +1,30 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：GetFileModifyTimeAsSeconds。
+id: CPP_BASE_REUSE_STD_FILESYSTEM_LAST_WRITE_TIME
+enabled: true
+name: "std::filesystem::last_write_time 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::filesystem::last_write_time（限定或裸调用；方法调用 .last_write_time() 不在内；filesystem::last_write_time 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "filesystem::last_write_time"
+meta:
+  rationale: "util::file::GetFileModifyTimeAsSeconds 获取文件最后修改时间（秒），与 std::filesystem::last_write_time 语义对应"
+  fix_suggestion: "改用 base 库等价实现：GetFileModifyTimeAsSeconds"
+  references:
+    - "common/include/file_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::filesystem::last_write_time"
+  base_preferred: "util::file::GetFileModifyTimeAsSeconds"
+  reason: "util::file::GetFileModifyTimeAsSeconds 获取文件最后修改时间（秒），与 std::filesystem::last_write_time 语义对应"

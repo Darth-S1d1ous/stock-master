@@ -1,0 +1,77 @@
+# 进程级共享 NSMutableDictionary 跨线程访问必须 @synchronized 或串行队列
+# TAPD Bug 1070112211160576253：HYEventReporter startTimeDict/agentStartTimeDict 多线程读写崩溃
+id: IOS_SHARED_MUTABLEDICT_MUST_SYNCHRONIZE
+enabled: true
+name: "iOS 单例共享可变容器跨线程访问必须 @synchronized 或串行队列"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [objc]
+patterns:
+  - id: shared_dict_access
+    spec:
+      type: Any
+      value:
+        # 复合模式：sharedInstance + dict 属性 + 下标/setValue/setObject
+        # MethodCall 无法表达"A 调 sharedInstance 后对 .xxxDict 做下标/赋值"的复合模式，
+        # 因为每个 MethodCall 只匹配单个调用节点，不能关联两个 AST 节点。
+        # Raw 是设计文档定义的正当逃生舱（§6.2.3 PatternSpecKind::Raw），不是简化 regex。
+        - { type: Raw, value: { pattern: 'sharedInstance\]\s*\.\w*[Dd]ict\w*\[' } }
+        - { type: Raw, value: { pattern: 'sharedInstance\]\s*\.\w*[Dd]ict\w*\s+setValue:' } }
+        - { type: Raw, value: { pattern: 'sharedInstance\]\s*\.\w*[Dd]ict\w*\s+setObject:' } }
+  - id: synchronized_guard
+    spec: { type: Raw, value: { pattern: '@synchronized\s*\(' } }
+conditions:
+  all:
+    - kind: NotHas
+      node: synchronized_guard
+meta:
+  rationale: |
+    Objective-C 的 NSMutableDictionary / NSMutableArray / NSMutableSet
+    都是非线程安全的。被单例 / sharedInstance 持有的可变容器
+    在多线程并发读写时，会破坏内部哈希桶 / 链表结构，触发
+    EXC_BAD_ACCESS（SIGSEGV）。
+
+    标准修复：
+    1. 单例主类暴露语义化 helper（page/agent × 读/写）
+    2. helper 内部用 @synchronized(self) / 串行 dispatch_queue /
+       GCD barrier 同步
+    3. 分类 / 外部调用方全部走 helper，不再直接字典 subscript
+
+    适用单例模式：
+    - [HYEventReporter sharedInstance]
+    - [NSUserDefaults standardUserDefaults]（已自带锁，免用）
+    - 自定义 sharedXxx
+  fix_suggestion: |
+    // 在报告的访问点 {{method_name}} 内，把对 sharedInstance.xxxDict 的直接 subscript
+    // 包装成 @synchronized(self) 块；推荐抽取语义化 helper（page/agent × 读/写）：
+    - (id)readFromDictForKey:(NSString *)key {
+        @synchronized (self) {
+            return self.xxxDict[key];
+        }
+    }
+    - (void)writeToDict:(id)value forKey:(NSString *)key {
+        @synchronized (self) {
+            self.xxxDict[key] = value;
+        }
+    }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：用 @synchronized(self) 包裹原行（保留原 setter/getter 调用）
+  # 不替换原代码内容，只在外层加锁
+  fix_suggestion_template:
+    template: |
+      // 对 {{dict_ref}} 的跨线程读写未加锁，可能崩溃
+      // 用 @synchronized(self) 包裹原调用（保留原行内容）：
+      - {{original_line}}
+      + {{indent}}@synchronized (self) {
+      + {{original_line}}
+      + {{indent}}}
+    extractors:
+      dict_ref:
+        from: issue_line
+        regex: '((?:\w+\.)*\w+Dict)\b'
+        group: 1
+        default: 'sharedInstance.xxxDict'
+  references: []
+  tapd_ids: ["1070112211160576253"]
+  tags: [ios, objc, thread_safety, data_race, singleton, comment_only_safe, context_aware_suggestion]

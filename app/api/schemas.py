@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.data_sources.models import PriceAdjustment
@@ -15,6 +16,7 @@ from app.domain.event_models import (
     EventSeverity,
     EventStatus,
     EvidenceType,
+    FeedbackType,
 )
 from app.domain.thesis_models import (
     ComparisonOperator,
@@ -82,6 +84,24 @@ class CreateInvestmentThesisRequest(ApiRequest):
             return value.strip().upper()
         return value
 
+class UpdateInvestmentThesisRequest(ApiRequest):
+    """Optimistic update for thesis content or lifecycle status."""
+
+    expected_version: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, min_length=1, max_length=5000)
+    status: ThesisStatus | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_change(self) -> "UpdateInvestmentThesisRequest":
+        if self.title is None and self.description is None and self.status is None:
+            raise ValueError("at least one thesis field must be changed")
+        if self.status is not None and self.reason is None:
+            raise ValueError("reason is required when status changes")
+        return self
+
+
 class InvestmentThesisResponse(ApiResponse):
     """Public representation of an investment thesis."""
 
@@ -135,6 +155,34 @@ class CreateThesisConditionRequest(ApiRequest):
                 "threshold must not be NaN or infinite"
             )
         return value
+
+class UpdateThesisConditionRequest(ApiRequest):
+    """Versioned update for a deterministic thesis condition."""
+
+    expected_version: int = Field(ge=1)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    kind: ConditionKind | None = None
+    metric: MetricCode | None = None
+    operator: ComparisonOperator | None = None
+    threshold: Decimal | None = None
+    consecutive_periods: int | None = Field(default=None, ge=1, le=12)
+    enabled: bool | None = None
+
+    @field_validator("threshold")
+    @classmethod
+    def require_finite_threshold(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and not value.is_finite():
+            raise ValueError("threshold must not be NaN or infinite")
+        return value
+
+    @model_validator(mode="after")
+    def require_change(self) -> "UpdateThesisConditionRequest":
+        changed = self.model_fields_set.difference({"expected_version"})
+        if not changed:
+            raise ValueError("at least one condition field must be changed")
+        return self
+
 
 class ThesisConditionResponse(ApiResponse):
     """Public representation of a deterministic thesis condition."""
@@ -203,6 +251,41 @@ class DomainEventResponse(ApiResponse):
     detected_at: datetime
     rule_version: int = Field(ge=1)
 
+class UpdateEventStatusRequest(ApiRequest):
+    """Request body for changing an event workflow status."""
+
+    status: EventStatus
+
+
+class CreateEventFeedbackRequest(ApiRequest):
+    """Request body for appending user feedback to an event."""
+
+    feedback_type: FeedbackType
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class EventFeedbackResponse(ApiResponse):
+    """Public representation of one immutable feedback entry."""
+
+    id: UUID
+    event_id: UUID
+    feedback_type: FeedbackType
+    comment: str | None
+    created_at: datetime
+
+
+class ThesisStatusHistoryResponse(ApiResponse):
+    """Public representation of one thesis status transition."""
+
+    id: UUID
+    thesis_id: UUID
+    from_status: ThesisStatus
+    to_status: ThesisStatus
+    reason: str
+    triggering_event_id: UUID | None
+    changed_at: datetime
+
+
 class EventEvidenceResponse(ApiResponse):
     """Public representation of evidence supporting an event."""
 
@@ -229,6 +312,7 @@ class ConditionMonitoringResponse(ApiResponse):
     evaluation: RuleEvaluationResponse
     event: DomainEventResponse | None
     evidence: tuple[EventEvidenceResponse, ...]
+    reused_evaluation: bool = False
 
 
 class ThesisMonitoringResponse(ApiResponse):

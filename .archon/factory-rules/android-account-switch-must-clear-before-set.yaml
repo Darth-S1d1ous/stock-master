@@ -1,0 +1,65 @@
+# 账户切换 setUserInfo 时 userID 变更必须先 clearUserInfo
+# TAPD Bug 1070112211153616692：账户切换未 clearUserInfo 导致 DTMP SignalService LogFault
+id: ANDROID_ACCOUNT_SWITCH_MUST_CLEAR_BEFORE_SET
+enabled: true
+name: "Android AccountManager 账户切换（userID 变更）必须先 clearUserInfo"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [kotlin]
+patterns:
+  - id: setuserinfo_user_id_mismatch
+    spec:
+      type: Raw
+      value:
+        pattern: 'fun\s+setUserInfo[^{]*\{[^}]*userID\.isNotEmpty\(\)\s*&&[^)]*userID\s*!=\s*\w+\.userID'
+  - id: clear_userinfo_call
+    spec: { type: Call, value: { name: "clearUserInfo" } }
+conditions:
+  all:
+    - kind: NotHas
+      node: clear_userinfo_call
+    - kind: InModule
+      module_glob: "**/account/**"
+meta:
+  rationale: |
+    AccountManager.setUserInfo 在 userID 与已有 userInfo 不一致（账户切换 / 游客升级）
+    时，必须先调用 clearUserInfo() 清理 SignalService 长链接认证信息，再写入新 user。
+
+    否则 DTMP 层 options_.auth_info 仍指向旧 uid/token，SignalService 重连时检测到
+    auth_info 与新 uid 不一致，触发 OnLoginSucceeded LogFault，长链接状态异常。
+
+    该规则与文件内"游客态切换"分支（已正确调用 clearUserInfo）形成对称约束：
+    所有"写入新 userInfo"路径都必须配套清理调用。
+  fix_suggestion: |
+    // 在报告的方法 {{method_name}} 内（如 setUserInfo / updateAccount），写入新 user 前
+    // 必须先比对 userID 不一致 → 调用 clearUserInfo 清理 SignalService 认证状态：
+    fun {{method_name}}(user: UserInfo) {
+        val pre = getUserInfo()
+        if (pre != null && pre.userID.isNotEmpty() && pre.userID != user.userID) {
+            // 账户切换：必须先清理旧认证
+            clearUserInfo()
+        }
+        // ... 写入新 user
+    }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：从 fun foo() 提取实际方法名
+  # 在写入新 user 前比对 userID 不一致 → clearUserInfo
+  fix_suggestion_template:
+    template: |
+      // 账户切换时 {{method_name}} 未先清理旧认证 → SignalService 状态残留
+      - {{original_line}}
+      + {{indent}}fun {{method_name}}(user: UserInfo) {
+      + {{indent}}    val pre = getUserInfo()
+      + {{indent}}    if (pre != null && pre.userID != user.userID) clearUserInfo()
+      + {{indent}}    // ... 写入新 user
+      + {{indent}}}
+    extractors:
+      method_name:
+        from: issue_line
+        regex: '\bfun\s+(\w+)'
+        group: 1
+        default: 'setUserInfo'
+  references: []
+  tapd_ids: ["1070112211153616692"]
+  tags: [android, kotlin, account, state_machine, lifecycle, context_aware_suggestion]

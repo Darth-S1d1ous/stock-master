@@ -1,0 +1,97 @@
+# iOS DTMP TypeViewModelFor 必须校验 cxxViewModel / CreateViewModel 返回值
+# TAPD Bug 1070112211160103082：YBWebBrowserView 经 dtmp_Bind 创建 WebBrowserViewModel 空指针崩溃
+id: IOS_DTMP_VIEWMODEL_MUST_NULL_CHECK
+enabled: true
+name: "iOS DTMP ViewModel 创建链必须判空 cxxViewModel / CreateViewModel / TypeViewModelFor"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [cpp, objc]
+patterns:
+  - id: cxx_viewmodel_direct_use
+    spec:
+      type: MethodCall
+      value:
+        method: "Of"
+        receiver_name: "ViewModelApi"
+  - id: create_viewmodel_direct_deref
+    spec:
+      type: MethodCall
+      value:
+        method: "CreateViewModel"
+  - id: type_viewmodel_for_discard
+    spec:
+      # C++ template instantiation — no AST variant yet, kept as Raw
+      type: Raw
+      value:
+        pattern: 'YB::TypeViewModelFor<[^>]+>\s*\(\s*&\s*\w+\s*\)\s*;'
+  - id: null_check_guard
+    spec:
+      # if (!x) guard — no AST scope variant, kept as Raw
+      type: Raw
+      value:
+        pattern: 'if\s*\(\s*!\w+\s*\)'
+conditions:
+  all:
+    - kind: NotHas
+      node: null_check_guard
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    DTMPViewModel cxxViewModel 在 ViewModel 未初始化 / 已释放 / 未注册等情况下
+    返回 nullptr。直接对其解引用（如 ->type()）会触发 EXC_BAD_ACCESS。
+
+    ViewModelProvider::CreateViewModel(type) 在 type 未注册、内存不足等情况下
+    返回 nullptr。直接对返回值调用 ->type() / ->release() 会触发空指针崩溃。
+    必须在调用点之后立即判空并 return std::nullopt。
+
+    TypeViewModelFor 返回 std::optional<ViewModelApi>，调用方（SETUP_VIEWMODEL 宏）
+    必须接住返回值并校验 has_value()。丢弃返回值会导致：
+    - ViewModel 创建失败时 vm 仍为 nil，但后续 performCreate / viewContext 逻辑继续执行
+    - 在 OC 层 vm=nil 是空消息转发，但 C++ 层 unique_ptr 移动语义会触发未定义行为
+  fix_suggestion: |
+    auto cxx_view_model = [*vm cxxViewModel];
+    if (!cxx_view_model) {
+        log_fault << "view_model is null";
+        return std::nullopt;
+    }
+    return ViewModelApi::Of(cxx_view_model);
+
+    auto view_model = provider->CreateViewModel(type);
+    if (!view_model) {
+        log_fault << "create view_model failed: " << type;
+        return std::nullopt;
+    }
+    // 后续才可使用 view_model->
+
+    auto viewModel = YB::TypeViewModelFor<ViewModelType>(&vm);
+    if (!viewModel || !vm) { return; }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：CreateViewModel 返回值未 null check 直接解引用会崩。
+  # 用 replace_with 在原行末尾插入 `if (!vm) return;` 守卫，
+  # 保留 `Type *vm = [Provider CreateViewModel:type];` 整行原内容。
+  fix_suggestion_template:
+    template: |
+      // CreateViewModel 返回值未 null check，直接解引用会崩
+      - {{original_line}}
+      + {{fixed_line}}
+    extractors:
+      var_name:
+        from: issue_line
+        regex: '(\w+)\s*=\s*\[[\w.]+ CreateViewModel'
+        group: 1
+        default: 'vm'
+      fixed_line:
+        from: issue_line
+        # 匹配 `Type *var = [Provider CreateViewModel:args];` 末尾分号
+        # group1=行尾分号（可选，含末尾空白）
+        # replace_with 在分号后追加换行 + `    if (!var) return;` 守卫，
+        # 保留原行的 `Type *var = [Provider CreateViewModel:args];` 完整声明
+        # {{var_name}} 引用阶段 1 提取的变量名（render 两阶段渲染替换）
+        # yaml 双引号字符串中 \n 是换行转义（YAML 1.1/1.2 spec）
+        regex: ';\s*$'
+        replace_with: ";\n    if (!{{var_name}}) return;  // 判空防止 EXC_BAD_ACCESS"
+  references: ["CWE-476"]
+  tapd_ids: ["1070112211160103082"]
+  tags: [ios, cpp, dtmp, null_safety, crash, viewmodel, context_aware_suggestion]

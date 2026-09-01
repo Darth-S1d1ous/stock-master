@@ -102,6 +102,55 @@ class InvestmentThesisTable(Base):
     )
 
 
+class ThesisStatusHistoryTable(Base):
+    """Stores immutable investment thesis status transitions."""
+
+    __tablename__ = "thesis_status_history"
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["thesis_id", "user_id"],
+            ["investment_theses.id", "investment_theses.user_id"],
+            name="thesis_status_history_thesis_owner",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["triggering_event_id", "user_id"],
+            ["domain_events.id", "domain_events.user_id"],
+            name="thesis_status_history_triggering_event_owner",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        Index(
+            "ix_thesis_status_history_thesis_changed",
+            "thesis_id",
+            "changed_at",
+        ),
+        CheckConstraint(
+            "from_status IN ('active', 'challenged', 'invalidated', 'archived')",
+            name="from_status_valid",
+        ),
+        CheckConstraint(
+            "to_status IN ('active', 'challenged', 'invalidated', 'archived')",
+            name="to_status_valid",
+        ),
+        CheckConstraint("from_status <> to_status", name="status_changed"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    thesis_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    triggering_event_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), nullable=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ThesisConditionTable(Base):
     """Stores a deterministic condition attached to a thesis."""
 
@@ -225,6 +274,62 @@ class ThesisConditionTable(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class ThesisConditionVersionTable(Base):
+    """Stores immutable snapshots of every thesis condition version."""
+
+    __tablename__ = "thesis_condition_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["condition_id", "thesis_id", "user_id"],
+            [
+                "thesis_conditions.id",
+                "thesis_conditions.thesis_id",
+                "thesis_conditions.user_id",
+            ],
+            name="thesis_condition_version_condition_chain",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "condition_id", "version", name="thesis_condition_version_identity"
+        ),
+        Index(
+            "ix_thesis_condition_versions_condition_created",
+            "condition_id",
+            "created_at",
+        ),
+        CheckConstraint("version >= 1", name="version_positive"),
+        CheckConstraint(
+            "kind IN ('support', 'risk', 'invalidation')",
+            name="kind_valid",
+        ),
+        CheckConstraint(
+            "operator IN ('greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal')",
+            name="operator_valid",
+        ),
+        CheckConstraint(
+            "consecutive_periods BETWEEN 1 AND 12",
+            name="consecutive_periods_valid",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    condition_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    thesis_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    metric: Mapped[str] = mapped_column(String(100), nullable=False)
+    operator: Mapped[str] = mapped_column(String(32), nullable=False)
+    threshold: Mapped[Decimal] = mapped_column(Numeric(30, 10), nullable=False)
+    consecutive_periods: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 
@@ -600,8 +705,65 @@ class EventEvidenceTable(Base):
     )
 
 
+class IngestionRunTable(Base):
+    """Stores one non-interactive market-data ingestion execution."""
+
+    __tablename__ = "ingestion_runs"
+    __table_args__ = (
+        Index("ix_ingestion_runs_source_started", "source", "started_at"),
+        CheckConstraint("mode IN ('symbol', 'active')", name="mode_valid"),
+        CheckConstraint(
+            "status IN ('running', 'succeeded', 'partial', 'failed')",
+            name="status_valid",
+        ),
+        CheckConstraint(
+            "requested_count >= 0 AND succeeded_count >= 0 AND failed_count >= 0",
+            name="counts_non_negative",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    succeeded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IngestionRunItemTable(Base):
+    """Stores one symbol result within an ingestion execution."""
+
+    __tablename__ = "ingestion_run_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["ingestion_runs.id"],
+            name="ingestion_run_item_run",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("run_id", "symbol", name="ingestion_run_item_identity"),
+        Index("ix_ingestion_run_items_run_status", "run_id", "status"),
+        CheckConstraint("status IN ('running', 'succeeded', 'failed')", name="status_valid"),
+        CheckConstraint("daily_bars_processed >= 0", name="daily_bars_non_negative"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    run_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(15), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    daily_bars_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fundamental_snapshot_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class EventFeedbackTable(Base):
-    """Stores a user's feedback for a domain event."""
+    """Stores immutable entries in a user's event feedback history."""
 
     __tablename__ = "event_feedback"
 
@@ -615,10 +777,11 @@ class EventFeedbackTable(Base):
             name="event_feedback_event_owner",
             ondelete="CASCADE",
         ),
-        UniqueConstraint(
+        Index(
+            "ix_event_feedback_event_created",
             "event_id",
             "user_id",
-            name="event_feedback_user_identity",
+            "created_at",
         ),
         Index(
             "ix_event_feedback_user_type",
@@ -626,9 +789,7 @@ class EventFeedbackTable(Base):
             "feedback_type",
         ),
         CheckConstraint(
-            "feedback_type IN "
-            "('useful', 'false_positive', "
-            "'duplicate', 'not_relevant')",
+            "feedback_type IN ('useful', 'not_useful', 'false_positive', 'confirmed', 'ignored', 'duplicate', 'not_relevant')",
             name="feedback_type_valid",
         ),
     )

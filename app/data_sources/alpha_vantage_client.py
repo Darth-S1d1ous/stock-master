@@ -32,7 +32,7 @@ class AlphaVantageClient:
 
         self._settings = settings or get_settings()
         if not self._settings.alpha_vantage_api_key.get_secret_value():
-            raise ValueError("缺少 ALPHA_VANTAGE_API_KEY")
+            raise ValueError("ALPHA_VANTAGE_API_KEY is required")
         self._validate_base_url(self._settings.alpha_vantage_base_url)
 
         self._provided_http_client = http_client

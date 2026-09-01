@@ -1,0 +1,30 @@
+# 由 scripts/gen_rules_from_std_to_base.rs 从 std_to_base.jsonl 生成（勿手改）。
+# 源记录 1 条；base 工厂：GetTimestamp。
+id: CPP_BASE_REUSE_STD_SYSTEM_CLOCK_NOW
+enabled: true
+name: "std::chrono::system_clock::now 的 base 库等价实现要求"
+severity: warn
+engine_requires: [ast]
+applies_to:
+  languages: [cpp]
+  exclude_glob:
+    - "**/third_party/**"
+    - "**/vendor/**"
+    - "**/tests/**"
+patterns:
+  - id: std_call
+    description: "调用 std::chrono::system_clock::now（限定或裸调用；方法调用 .now() 不在内；system_clock::now 限定名消歧同名 API）"
+    spec:
+      type: Call
+      value:
+        name: "system_clock::now"
+meta:
+  rationale: "std::chrono::system_clock::now 获取当前时间；base util::time::GetTimestamp 返回毫秒时间戳"
+  fix_suggestion: "改用 base 库等价实现：GetTimestamp"
+  references:
+    - "common/include/time_util.h"
+  tapd_ids: ["1070112211134320991"]
+  tags: ["base-reuse", "std-to-base", "generated"]
+  std_signature: "std::chrono::system_clock::now"
+  base_preferred: "util::time::GetTimestamp"
+  reason: "std::chrono::system_clock::now 获取当前时间；base util::time::GetTimestamp 返回毫秒时间戳"

@@ -1,0 +1,86 @@
+# C++ 字符串链式 operator+ 拼接（C6：多次 operator+ 产生 N-1 个临时对象）
+# TAPD Bug 1070112211162056423：chat_input_model_select_project_handler.cc:936-939
+# 反模式：return std::string("a") + b + "c" + d + "e" + f + g;
+# - 每次 operator+ 构造新的 std::string 临时对象
+# - 6 个 + → 6 次堆分配 / 6 次释放
+id: CPP_STRING_CONCAT_USE_APPEND
+enabled: true
+name: "C++ 字符串链式拼接：连续 N 次 operator+ 应改用 += + reserve()"
+severity: warn
+engine_requires: [regex]
+applies_to:
+  languages: [cpp]
+patterns:
+  # 匹配连续 5 个及以上 operator+ 的字符串拼接表达式（FP 审计后收紧）
+  # 阈值说明：原 {3,}（匹配 3 个 + 起步）实际触发 clang-tidy 类似规则的阈值；收紧到 {4,}
+  # 要求至少 4 个 +（5 段拼接）才报告，对应 N-1=4 个 std::string 临时对象
+  - id: chain_operator_plus
+    spec:
+      type: Raw
+      value:
+        # ^\s*[^\s/*] 锚定：行首若干空格后必须是非 / 非 * 字符（排除注释行）
+        # [\s\S]*? 容许中间任意字符（非贪婪）
+        # {4,} 收紧到 4 个 + 起步（含起始 std::string/"xxx" 共 5 段）
+        pattern: '^\s*[^\s/*].*?(?:std::string\s*\([^)]*\)|"\w+")(?:\s*\+\s*[^+;]+){4,}'
+conditions:
+  all:
+    - kind: InModule
+      module_glob: "**/dtmp/**"
+meta:
+  rationale: |
+    C++ std::string 的 operator+ 每次构造新的临时对象：
+    `s1 + s2` → 临时 = s1 内容 + s2 内容（堆分配 + 拷贝）。
+
+    链式 `s1 + s2 + s3 + s4 + s5 + s6` 产生约 N-1 = 5 个临时对象，
+    每个临时对象都触发一次堆分配和深拷贝。
+
+    TAPD Bug 1070112211162056423：MakeAgentModelListCacheKey() 用 6 个 operator+，
+    产生约 6 次堆分配 / 6 次释放。
+
+    正确写法：用 `+=` 累加 + 预先 `reserve()`，所有内容直接写入目标 string：
+    ```cpp
+    std::string key;
+    key.reserve(64);  // 预估总长度
+    key += "model_";
+    key += project_info_id_.agent_id;
+    key += "_style";
+    key += UTIL_CONVERT::NumToString(...);
+    // ...
+    return key;
+    ```
+  fix_suggestion: |
+    // 当前代码（6 个临时对象）：
+    return std::string("model_") + project_info_id_.agent_id
+        + "_style" + UTIL_CONVERT::NumToString(...)
+        + "_isProject" + (...)
+        + "_acct" + UTIL_CONVERT::NumToString(...) + team_id;
+
+    // 修复后（reserve + +=，0 临时对象）：
+    std::string key;
+    key.reserve(64);
+    key += "model_";
+    key += project_info_id_.agent_id;
+    key += "_style";
+    key += UTIL_CONVERT::NumToString(...);
+    key += "_isProject";
+    key += (...);
+    key += "_acct";
+    key += UTIL_CONVERT::NumToString(...);
+    key += team_id;
+    return key;
+  fix_suggestion_template:
+    template: |
+      // 链式 operator+ 拼接产生 {{plus_count}} 个临时 string，应改用 += + reserve
+      - {{original_line}}
+      + {{indent}}std::string __result;
+      + {{indent}}__result.reserve(64);  // 预估总长度，避免反复 realloc
+      + {{indent}}// 用 __result += ... 替换链式 operator+，0 临时对象
+    extractors:
+      plus_count:
+        from: issue_line
+        regex: '(\+\s*[^+;]+(?:\+\s*[^+;]+)*)'
+        # 计算 + 个数（粗略：匹配到的 `+` 字符数）
+        default: 'N'
+  references: ["clang-tidy:performance-inefficient-string-concatenation"]
+  tapd_ids: ["1070112211162056423"]
+  tags: [cpp, performance, code_quality, string, concat, operator_plus, context_aware_suggestion]

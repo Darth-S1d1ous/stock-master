@@ -1,0 +1,40 @@
+# Android View detach 后 performClick NPE
+# TAPD Bug 1070112211153774709
+id: ANDROID_PERFORM_CLICK_MUST_CHECK_ATTACHED
+enabled: true
+name: "Android View performLongClick/performClick 前必须校验 attach 状态"
+severity: error
+engine_requires: [ast]
+applies_to:
+  languages: [kotlin]
+patterns:
+  # 只匹配 receiver 为 root/view/binding 的 performClick（排除 this/it 等隐式 receiver）
+  - id: perform_click
+    spec:
+      type: Any
+      value:
+        - { type: MethodCall, value: { method: "performLongClick", receiver_name: "{root,view,binding,holder,itemView}" } }
+        - { type: MethodCall, value: { method: "performClick", receiver_name: "{root,view,binding,holder,itemView}" } }
+  - id: attach_guard_check
+    spec:
+      type: Any
+      value:
+        - { type: Raw, value: { pattern: 'isAttachedToWindow' } }
+        - { type: Raw, value: { pattern: '\.parent\s*!=\s*null' } }
+conditions:
+  all:
+    - kind: NotHas
+      node: attach_guard_check
+    - kind: ClassScope
+      class_glob: "*Adapter*"
+meta:
+  rationale: |
+    Android View.performLongClick() / performClick() 在 View detach 后 NPE。
+    click_callback_safe 过滤 + receiver_name 限定排除 setOnClickListener 回调内调用。
+  fix_suggestion: |
+    if (root.parent != null && root.isAttachedToWindow) {
+        root.performLongClick()
+    }
+  references: ["CWE-476"]
+  tapd_ids: ["1070112211153774709"]
+  tags: [android, kotlin, npe, view_lifecycle, null_safety, click_callback_safe, context_aware_suggestion]

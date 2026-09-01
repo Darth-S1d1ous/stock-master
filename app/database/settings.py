@@ -20,19 +20,19 @@ class DatabaseSettings(BaseSettings):
     postgres_host: str = Field(default="127.0.0.1", min_length=1)
     postgres_port: int = Field(default=5432, ge=1, le=65535)
 
-    # SQLAlchemy 连接池常驻连接数
+    # SQLAlchemy connection pool size
     database_pool_size: int = Field(
         default=5,
         ge=1,
         le=50,
     )
-    # 繁忙时允许的额外连接数
+    # Additional connections allowed under load
     database_max_overflow: int = Field(
         default=10,
         ge=0,
         le=100,
     )
-    # 是否打印 SQL 语句
+    # Whether to log SQL statements
     database_echo: bool = False
 
     @property

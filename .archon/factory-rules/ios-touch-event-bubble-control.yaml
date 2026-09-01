@@ -1,0 +1,118 @@
+# 自定义 UIView 子类含越界子视图必须重写 pointInside:withEvent:
+# TAPD Bug 1070112211159169605：YBVoiceRecorderNavgationBar 含越界 controlButtonsContainer 未重写 pointInside
+id: IOS_TOUCH_EVENT_BUBBLE_CONTROL
+enabled: true
+name: "iOS UIView 子类含越界子视图必须重写 pointInside:withEvent:"
+severity: error
+engine_requires: [ast, regex]
+applies_to:
+  languages: [objc]
+patterns:
+  # 关键设计：把"越界 frame 表达式"作为 issue 命中点（而非 addSubview 行）
+  # 这样 issue 报在真实越界代码行（如 make.left.offset(-119)），定位精确
+  #
+  # 越界判定（精确）：
+  # - make.left.offset(-NN) NN≥50：水平左越界（子视图左侧超出 superview）
+  # - CGRectMake 大幅负 origin（≤ -50）：origin.x/y 越界
+  # 排除：
+  # - make.right/bottom/centerY/centerX 的负 offset（这些通常是 padding，不视为越界）
+  - id: out_of_bounds_frame
+    spec:
+      type: Any
+      value:
+        # make.left.offset(-NN) NN≥50：水平左越界（区别于 right/bottom padding）
+        - { type: Raw, value: { pattern: 'make\.left.*(?:mas_equalTo|offset)\s*\(\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+        - { type: Raw, value: { pattern: 'make\.left.*\.offset\s*\(\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+        # mas_left.mas_equalTo(-NN) NN≥50：水平左越界
+        - { type: Raw, value: { pattern: 'mas_left\s*(?:mas_equalTo|equalTo)\s*\(\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+        # CGRectMake 大幅负 origin（≤ -50）
+        - { type: Raw, value: { pattern: 'CGRectMake\s*\(\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+        - { type: Raw, value: { pattern: 'CGRectMake\s*\([^)]*,\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+        # frame.origin.x/y 大幅负值（≤ -50）
+        - { type: Raw, value: { pattern: 'frame\.origin\.[xy]\s*=\s*-(?:[5-9][0-9]|[1-9][0-9]{2,})' } }
+  # 文件级条件 pattern（不作为 issue 命中点）
+  - id: has_layout_subviews
+    spec:
+      type: Raw
+      value:
+        pattern: '-\s*\(\s*void\s*\)\s*layoutSubviews'
+  - id: point_inside_override
+    spec:
+      type: Raw
+      value:
+        pattern: '-\s*\(\s*BOOL\s*\)\s*pointInside:\s*\(\s*CGPoint\s*\)'
+  - id: is_scrollview_class
+    spec:
+      type: Raw
+      value:
+        pattern: '@interface\s+\w+\s*:\s*UIScroll(?:View| class)'
+  - id: touch_method_defined
+    spec:
+      type: Any
+      value:
+        - { type: Raw, value: { pattern: '-\s*\([^)]*\)\s*touches(?:Began|Ended|Moved|Cancelled)(?:WithTouches|:withEvent:)' } }
+        - { type: Raw, value: { pattern: '-\s*\(\s*UIView\s*\*\s*\)\s*hitTest:\s*\(\s*CGPoint\s*\)' } }
+        - { type: Raw, value: { pattern: 'UITapGestureRecognizer' } }
+        - { type: Raw, value: { pattern: 'addTarget:.*action:.*forControlEvents' } }
+conditions:
+  all:
+    - kind: NotHas
+      node: point_inside_override
+    - kind: Has
+      node: has_layout_subviews
+    # 文件必须真正定义 touch 事件方法（业务真值前提）
+    - kind: Has
+      node: touch_method_defined
+    - kind: ClassScope
+      class_glob: "*View*"
+    # UIScrollView 子类自带 hit-testing，不需要 pointInside
+    - kind: NotHas
+      node: is_scrollview_class
+meta:
+  rationale: |
+    iOS hit-testing 默认实现 UIView.pointInside:withEvent: 只判断触点是否在
+    self.bounds 内。如果子视图的 frame 超出 superview 的 bounds，且
+    superview 未重写 pointInside:withEvent:，则子视图收不到触摸事件。
+
+    精确命中设计：把"越界 frame 表达式"作为 issue 命中点（如 make.left.offset(-119)），
+    而非 addSubview 行。这样 issue 行号精确定位到真实越界代码，便于开发者快速修复。
+
+    越界阈值：≤ -50（排除常规 padding -10/-16/-20/-30/-40）。
+  fix_suggestion: |
+    - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+        if ([super pointInside:point withEvent:event]) return YES;
+        for (UIView *subview in self.subviews) {
+            if (subview.hidden || !subview.userInteractionEnabled) continue;
+            CGPoint subviewPoint = [self convertPoint:point toView:subview];
+            if ([subview pointInside:subviewPoint withEvent:event]) return YES;
+        }
+        return NO;
+    }
+  # 声明式 context_aware_suggestion（task #335）
+  # 真实修复规律：从 @interface/@implementation 行提取 View 类名，建议重写 pointInside:withEvent:
+  # issue_line 通常是越界 frame 表达式行（非 @interface 行），无法直接提取类名
+  # 用 issue_line 自身内容（含 make.left.offset 等），fallback 到 YourView
+  fix_suggestion_template:
+    template: |
+      // {{view_name}} 含越界子视图但未重写 pointInside:withEvent:，触摸区域未扩展
+      - {{original_line}}
+      + {{indent}}- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+      + {{indent}}    if ([super pointInside:point withEvent:event]) return YES;
+      + {{indent}}    for (UIView *subview in self.subviews) {
+      + {{indent}}        CGPoint sub = [self convertPoint:point toView:subview];
+      + {{indent}}        if ([subview pointInside:sub withEvent:event]) return YES;
+      + {{indent}}    }
+      + {{indent}}    return NO;
+      + {{indent}}}
+    extractors:
+      view_name:
+        from: issue_line
+        # issue_line 是越界 frame 表达式行（如 make.left.offset(-119)），不含类名
+        # 类名需从 @implementation 行提取（当前 extractor 不支持跨行 source 搜索）
+        # 用占位符 <YourView>，开发者按实际类名替换
+        regex: '@(?:interface|implementation)\s+(\w+)'
+        group: 1
+        default: '<YourView>'
+  references: []
+  tapd_ids: ["1070112211159169605"]
+  tags: [ios, objc, uikit, hit_testing, touch, interaction, accessibility, context_aware_suggestion]
