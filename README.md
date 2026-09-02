@@ -273,7 +273,17 @@ Create and activate a virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
+```
+
+Run the fast backend checks with `python -m pytest -m "not integration"` and `ruff check app tests`. For the isolated PostgreSQL integration test:
+
+```bash
+docker compose -f docker-compose.test.yml up -d --wait
+RUN_POSTGRES_INTEGRATION=1 POSTGRES_USER=stock_master_test \
+  POSTGRES_PASSWORD=stock_master_test_password POSTGRES_DB=stock_master_test \
+  POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55432 python -m pytest
+docker compose -f docker-compose.test.yml down
 ```
 
 Configure local secrets in `.env`. Never commit this file.
@@ -290,9 +300,11 @@ The protected Next.js web console lives in `web/`. Configure its server-only env
 ```bash
 cd web
 cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
+
+Run `npm run check` to execute linting, type checking, coverage tests, and the production build.
 
 Set `BACKEND_API_TOKEN` to the same secret as the backend `API_BEARER_TOKEN`. `WEB_ADMIN_PASSWORD` and `WEB_SESSION_SECRET` protect browser access; none of these values are exposed to client-side JavaScript.
 
@@ -575,7 +587,17 @@ MVP 采用模块化单体。只有在实际运行需求出现后，才引入 Red
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
+```
+
+通过 `python -m pytest -m "not integration"` 和 `ruff check app tests` 运行后端快速检查。真实 PostgreSQL 集成测试使用隔离数据库：
+
+```bash
+docker compose -f docker-compose.test.yml up -d --wait
+RUN_POSTGRES_INTEGRATION=1 POSTGRES_USER=stock_master_test \
+  POSTGRES_PASSWORD=stock_master_test_password POSTGRES_DB=stock_master_test \
+  POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55432 python -m pytest
+docker compose -f docker-compose.test.yml down
 ```
 
 在 `.env` 中配置本地密钥，禁止提交该文件。
@@ -592,9 +614,11 @@ uvicorn app.main:app --reload
 ```bash
 cd web
 cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
+
+运行 `npm run check` 可依次执行 lint、类型检查、覆盖率测试和生产构建。
 
 `BACKEND_API_TOKEN` 应与后端的 `API_BEARER_TOKEN` 保持一致。`WEB_ADMIN_PASSWORD` 和 `WEB_SESSION_SECRET` 用于保护浏览器访问，以上值均不会暴露给客户端 JavaScript。
 

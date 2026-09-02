@@ -102,7 +102,7 @@ def main() -> int:
         if args.timeout_seconds <= 0 or args.minimum_interval_seconds < 0:
             raise ValueError("Timeout must be positive and rate interval cannot be negative.")
         return asyncio.run(_run(args))
-    except (ValueError, ImportError) as exc:
+    except (ValueError, ImportError):
         _emit(
             {"code": "configuration_error", "message": "Invalid ingestion configuration."},
             error=True,

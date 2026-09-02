@@ -1,0 +1,16 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: stock_master_test
+      POSTGRES_PASSWORD: stock_master_test_password
+      POSTGRES_DB: stock_master_test
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock_master_test -d stock_master_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    tmpfs:
+      - /var/lib/postgresql/data

@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any, cast
 import unittest
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 from pydantic import SecretStr
@@ -15,13 +15,7 @@ from app.api.dependencies import (
     get_thesis_repository,
 )
 from app.database.thesis_repositories import ThesisRepository
-from app.domain.thesis_models import (
-    ComparisonOperator,
-    ConditionKind,
-    InvestmentThesis,
-    MetricCode,
-    ThesisCondition,
-)
+from app.domain.thesis_models import InvestmentThesis, ThesisCondition
 from app.main import app
 from app.services.thesis_monitoring_service import (
     ThesisMonitoringResult,

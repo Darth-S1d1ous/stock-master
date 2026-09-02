@@ -20,7 +20,6 @@ from app.domain.thesis_models import (
     InvestmentThesis,
     MetricCode,
     ThesisCondition,
-    ThesisStatus,
 )
 from app.main import app
 
