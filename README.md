@@ -252,7 +252,7 @@ Not yet implemented:
 ├── architecture.svg                # Detailed architecture diagram
 ├── alembic.ini
 ├── docker-compose.yml
-├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
@@ -273,7 +273,7 @@ Create and activate a virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 Run the fast backend checks with `python -m pytest -m "not integration"` and `ruff check app tests`. For the isolated PostgreSQL integration test:
@@ -566,7 +566,7 @@ MVP 采用模块化单体。只有在实际运行需求出现后，才引入 Red
 ├── architecture.svg                # 详细架构图
 ├── alembic.ini
 ├── docker-compose.yml
-├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
@@ -587,7 +587,7 @@ MVP 采用模块化单体。只有在实际运行需求出现后，才引入 Red
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 通过 `python -m pytest -m "not integration"` 和 `ruff check app tests` 运行后端快速检查。真实 PostgreSQL 集成测试使用隔离数据库：
