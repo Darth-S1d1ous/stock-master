@@ -4,6 +4,7 @@ from urllib.parse import quote
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class DatabaseSettings(BaseSettings):
     """ PostgreSQL database settings """
 

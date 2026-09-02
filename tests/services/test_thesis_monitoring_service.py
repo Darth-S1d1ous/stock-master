@@ -1,7 +1,7 @@
+import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import cast
-import unittest
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -21,7 +21,6 @@ from app.services.thesis_monitoring_service import (
     ThesisMonitoringService,
     ThesisNotMonitorableError,
 )
-
 
 _NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
@@ -44,7 +43,7 @@ class ThesisMonitoringServiceTests(unittest.IsolatedAsyncioTestCase):
             kind=ConditionKind.RISK,
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
             operator=ComparisonOperator.LESS_THAN_OR_EQUAL,
-            threshold=Decimal("-5"),
+            threshold=Decimal(-5),
             created_at=_NOW,
             updated_at=_NOW,
         )

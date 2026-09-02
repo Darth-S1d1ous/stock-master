@@ -4,7 +4,6 @@ from typing import Literal, Protocol, Self
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar
 
-
 OutputSize = Literal["compact", "full"]
 
 

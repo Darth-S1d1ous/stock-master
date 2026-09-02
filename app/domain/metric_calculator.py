@@ -9,8 +9,7 @@ from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar
 from app.domain.thesis_models import MetricCode
 
-
-_ONE_HUNDRED = Decimal("100")
+_ONE_HUNDRED = Decimal(100)
 _VOLUME_WINDOW = 20
 
 

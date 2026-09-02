@@ -1,7 +1,7 @@
+import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import cast
-import unittest
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -20,7 +20,6 @@ from app.domain.thesis_models import (
     InvestmentThesis,
     MetricCode,
     ThesisCondition,
-    ThesisStatus,
 )
 from app.main import app
 
@@ -116,7 +115,7 @@ class LifecycleApiTests(unittest.IsolatedAsyncioTestCase):
             kind=ConditionKind.RISK,
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
             operator=ComparisonOperator.LESS_THAN_OR_EQUAL,
-            threshold=Decimal("-5"),
+            threshold=Decimal(-5),
             created_at=_NOW,
             updated_at=_NOW,
         )

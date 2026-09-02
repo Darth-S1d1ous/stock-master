@@ -14,7 +14,12 @@ from decimal import Decimal
 
 from app.domain.event_models import RuleEvaluation
 from app.domain.metric_calculator import MetricResult
-from app.domain.thesis_models import InvestmentThesis, ComparisonOperator, ThesisCondition
+from app.domain.thesis_models import (
+    ComparisonOperator,
+    InvestmentThesis,
+    ThesisCondition,
+)
+
 
 class RuleEvaluationError(ValueError):
     """Raised when a rule evaluation cannot be completed."""

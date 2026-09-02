@@ -12,9 +12,9 @@ and sanitized provider errors without exposing sensitive implementation details.
 """
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-import re
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, text, update
@@ -176,8 +176,7 @@ class IngestionRunner:
         last_error: Exception | None = None
         for attempt in range(1, self._max_attempts + 1):
             try:
-                async with AsyncSessionFactory() as session:
-                    async with session.begin():
+                async with AsyncSessionFactory() as session, session.begin():
                         service = StockIngestionService(session, data_source)
                         result = await asyncio.wait_for(
                             service.refresh_symbol(symbol, self._output_size),
@@ -191,7 +190,7 @@ class IngestionRunner:
                     daily_bars_processed=result.daily_bars_processed,
                     fundamental_snapshot_date=result.fundamental_snapshot_date,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001  # retry loop must capture any failure to retry and report
                 last_error = exc
                 if attempt < self._max_attempts:
                     await asyncio.sleep(min(2 ** (attempt - 1), 4))
@@ -223,20 +222,19 @@ class IngestionRunner:
         requested_count: int,
         started_at: datetime,
     ) -> None:
-        async with AsyncSessionFactory() as session:
-            async with session.begin():
-                session.add(
-                    IngestionRunTable(
-                        id=run_id,
-                        source=self._provider,
-                        mode=mode,
-                        status="running",
-                        requested_count=requested_count,
-                        succeeded_count=0,
-                        failed_count=0,
-                        started_at=started_at,
-                    )
+        async with AsyncSessionFactory() as session, session.begin():
+            session.add(
+                IngestionRunTable(
+                    id=run_id,
+                    source=self._provider,
+                    mode=mode,
+                    status="running",
+                    requested_count=requested_count,
+                    succeeded_count=0,
+                    failed_count=0,
+                    started_at=started_at,
                 )
+            )
 
     @staticmethod
     async def _save_success_item(
@@ -262,21 +260,20 @@ class IngestionRunner:
         run_id: UUID,
         outcome: SymbolIngestionOutcome,
     ) -> None:
-        async with AsyncSessionFactory() as session:
-            async with session.begin():
-                session.add(
-                    IngestionRunItemTable(
-                        id=uuid4(),
-                        run_id=run_id,
-                        symbol=outcome.symbol,
-                        status="failed",
-                        daily_bars_processed=0,
-                        error_code=outcome.error_code,
-                        error_message=outcome.error_message,
-                        started_at=datetime.now(UTC),
-                        completed_at=datetime.now(UTC),
-                    )
+        async with AsyncSessionFactory() as session, session.begin():
+            session.add(
+                IngestionRunItemTable(
+                    id=uuid4(),
+                    run_id=run_id,
+                    symbol=outcome.symbol,
+                    status="failed",
+                    daily_bars_processed=0,
+                    error_code=outcome.error_code,
+                    error_message=outcome.error_message,
+                    started_at=datetime.now(UTC),
+                    completed_at=datetime.now(UTC),
                 )
+            )
 
     async def _complete_run(
         self,
@@ -286,18 +283,17 @@ class IngestionRunner:
         succeeded = sum(item.succeeded for item in outcomes)
         failed = len(outcomes) - succeeded
         status = "succeeded" if failed == 0 else "failed" if succeeded == 0 else "partial"
-        async with AsyncSessionFactory() as session:
-            async with session.begin():
-                await session.execute(
-                    update(IngestionRunTable)
-                    .where(IngestionRunTable.id == run_id)
-                    .values(
-                        status=status,
-                        succeeded_count=succeeded,
-                        failed_count=failed,
-                        completed_at=datetime.now(UTC),
-                    )
+        async with AsyncSessionFactory() as session, session.begin():
+            await session.execute(
+                update(IngestionRunTable)
+                .where(IngestionRunTable.id == run_id)
+                .values(
+                    status=status,
+                    succeeded_count=succeeded,
+                    failed_count=failed,
+                    completed_at=datetime.now(UTC),
                 )
+            )
         return IngestionRunOutcome(
             run_id=run_id,
             source=self._provider,

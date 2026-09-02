@@ -1,6 +1,6 @@
+import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
-import unittest
 from uuid import uuid4
 
 import httpx
@@ -112,13 +112,13 @@ class ContractRegressionTests(unittest.TestCase):
             kind=ConditionKind.RISK,
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
             operator=ComparisonOperator.LESS_THAN_OR_EQUAL,
-            threshold=Decimal("-5"),
+            threshold=Decimal(-5),
             created_at=now,
             updated_at=now,
         )
         metric_result = MetricResult(
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
-            value=Decimal("-6"),
+            value=Decimal(-6),
             data_as_of=date(2026, 8, 25),
             observation_ids=(uuid4(), uuid4()),
         )
@@ -174,17 +174,17 @@ class ContractRegressionTests(unittest.TestCase):
         bar = DailyBar(
             symbol="AAPL",
             trading_date=date(2026, 8, 25),
-            open=Decimal("100"),
-            high=Decimal("102"),
-            low=Decimal("99"),
-            close=Decimal("101"),
+            open=Decimal(100),
+            high=Decimal(102),
+            low=Decimal(99),
+            close=Decimal(101),
             volume=100,
             source=" Finnhub ",
             received_at=received_at,
         )
         fundamentals = CompanyFundamentals(
             symbol="AAPL",
-            pe_ratio=Decimal("20"),
+            pe_ratio=Decimal(20),
             source=" Alpha_Vantage ",
             received_at=received_at,
         )
@@ -202,7 +202,7 @@ class ContractRegressionTests(unittest.TestCase):
             observation_id=observation_id,
             snapshot_date=date(2026, 6, 30),
             symbol="AAPL",
-            pe_ratio=Decimal("20"),
+            pe_ratio=Decimal(20),
             source="alpha_vantage",
             received_at=datetime(2026, 8, 25, tzinfo=UTC),
         )

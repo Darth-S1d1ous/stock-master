@@ -11,6 +11,7 @@ from app.database.tables import (
     FundamentalSnapshotTable,
 )
 
+
 class StockDataRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

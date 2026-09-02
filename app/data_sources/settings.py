@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class DataSourceSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",

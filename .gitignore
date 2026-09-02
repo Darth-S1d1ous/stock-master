@@ -18,7 +18,9 @@ __pycache__/
 .ruff_cache/
 .pyright/
 .coverage
+coverage.xml
 htmlcov/
+web/coverage/
 
 # Build artifacts
 build/

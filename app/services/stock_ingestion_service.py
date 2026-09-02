@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.data_sources.base import OutputSize, StockDataSource
 from app.database.repositories import StockDataRepository
 
+
 @dataclass(frozen=True, slots=True)
 class IngestionResult:
     symbol: str

@@ -1,11 +1,11 @@
+import os
+import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
-import os
 from pathlib import Path
-import unittest
 from uuid import uuid4
 
-from alembic import command
+import pytest
 from alembic.config import Config
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
+from alembic import command
 from app.data_sources.models import DailyBar
 from app.database.domain_tables import (
     DomainEventTable,
@@ -34,10 +35,11 @@ from app.domain.thesis_models import (
 )
 from app.services.thesis_monitoring_service import ThesisMonitoringService
 
-
 _RUN_INTEGRATION = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+
+pytestmark = pytest.mark.integration
 
 
 @unittest.skipUnless(
@@ -56,6 +58,10 @@ class ThesisMonitoringFlowIntegrationTests(
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.settings = get_database_settings()
+        if not cls.settings.postgres_db.lower().endswith("_test"):
+            raise RuntimeError(
+                "PostgreSQL integration tests require a database name ending in '_test'"
+            )
         if cls.settings.postgres_host not in {
             "127.0.0.1",
             "localhost",
@@ -116,7 +122,7 @@ class ThesisMonitoringFlowIntegrationTests(
             kind=ConditionKind.RISK,
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
             operator=ComparisonOperator.LESS_THAN_OR_EQUAL,
-            threshold=Decimal("-5"),
+            threshold=Decimal(-5),
             created_at=_NOW,
             updated_at=_NOW,
         )

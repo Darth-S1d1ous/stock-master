@@ -1,9 +1,9 @@
+import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
-import unittest
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 from pydantic import SecretStr
@@ -15,19 +15,12 @@ from app.api.dependencies import (
     get_thesis_repository,
 )
 from app.database.thesis_repositories import ThesisRepository
-from app.domain.thesis_models import (
-    ComparisonOperator,
-    ConditionKind,
-    InvestmentThesis,
-    MetricCode,
-    ThesisCondition,
-)
+from app.domain.thesis_models import InvestmentThesis, ThesisCondition
 from app.main import app
 from app.services.thesis_monitoring_service import (
     ThesisMonitoringResult,
     ThesisMonitoringService,
 )
-
 
 _USER_ID = uuid4()
 _TOKEN = "test-token-with-at-least-thirty-two-characters"
@@ -223,7 +216,7 @@ class ThesesApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(captured), 1)
         self.assertEqual(captured[0].user_id, _USER_ID)
         self.assertEqual(captured[0].thesis_id, thesis_id)
-        self.assertEqual(captured[0].threshold, Decimal("-5"))
+        self.assertEqual(captured[0].threshold, Decimal(-5))
         self.assertEqual(
             response.headers.get("location"),
             (

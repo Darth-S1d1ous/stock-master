@@ -42,6 +42,7 @@ from app.domain.thesis_models import (
     ThesisStatusChange,
 )
 
+
 class ThesisRepositoryError(RuntimeError):
     """Base error raised by the thesis repository."""
 

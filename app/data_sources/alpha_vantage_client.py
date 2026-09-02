@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import Any
+from typing import Any, Self
 from urllib.parse import urlsplit
 
 import httpx
@@ -38,7 +38,7 @@ class AlphaVantageClient:
         self._provided_http_client = http_client
         self._owned_http_client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "AlphaVantageClient":
+    async def __aenter__(self) -> Self:
         """ if no http client is provided, create one """
 
         if self._provided_http_client is None:

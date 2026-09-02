@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-from dataclasses import asdict
-from datetime import date, datetime
 import json
 import sys
+from dataclasses import asdict
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -102,13 +102,13 @@ def main() -> int:
         if args.timeout_seconds <= 0 or args.minimum_interval_seconds < 0:
             raise ValueError("Timeout must be positive and rate interval cannot be negative.")
         return asyncio.run(_run(args))
-    except (ValueError, ImportError) as exc:
+    except (ValueError, ImportError):
         _emit(
             {"code": "configuration_error", "message": "Invalid ingestion configuration."},
             error=True,
         )
         return EXIT_CONFIGURATION_ERROR
-    except Exception:
+    except Exception:  # noqa: BLE001  # 顶层入口：将任何未预期异常映射为稳定退出码
         _emit(
             {"code": "ingestion_failed", "message": "The ingestion run could not be started."},
             error=True,

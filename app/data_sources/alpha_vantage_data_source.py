@@ -1,11 +1,14 @@
 from types import TracebackType
+from typing import Self
 
 import httpx
 
 from app.data_sources.alpha_vantage_client import AlphaVantageClient
-from app.data_sources.base import OutputSize
-from app.data_sources.alpha_vantage_fundamental_parser import parse_alpha_vantage_company_overview
+from app.data_sources.alpha_vantage_fundamental_parser import (
+    parse_alpha_vantage_company_overview,
+)
 from app.data_sources.alpha_vantage_parser import parse_alpha_vantage_daily
+from app.data_sources.base import OutputSize
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar
 from app.data_sources.settings import DataSourceSettings
@@ -25,7 +28,7 @@ class AlphaVantageDataSource:
         )
     
     """ wait for client to be initialized first """
-    async def __aenter__(self) -> "AlphaVantageDataSource":
+    async def __aenter__(self) -> Self:
         await self._client.__aenter__()
         return self
 
