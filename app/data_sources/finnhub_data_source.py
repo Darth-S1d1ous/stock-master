@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
+from typing import Self
 from urllib.parse import urlsplit
 
 import httpx
@@ -13,7 +14,6 @@ from app.data_sources.base import OutputSize
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar, PriceAdjustment
 from app.data_sources.settings import DataSourceSettings, get_settings
-
 
 _SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 _ALLOWED_API_HOSTS = frozenset({"finnhub.io"})
@@ -40,7 +40,7 @@ class FinnhubDataSource:
         self._provided_http_client = http_client
         self._owned_http_client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "FinnhubDataSource":
+    async def __aenter__(self) -> Self:
         if not self._settings.finnhub_api_key.get_secret_value():
             raise ValueError("FINNHUB_API_KEY is required")
         if self._provided_http_client is None:

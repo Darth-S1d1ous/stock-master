@@ -1,12 +1,11 @@
+import os
+import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
-import os
 from pathlib import Path
-import unittest
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
@@ -17,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
+from alembic import command
 from app.data_sources.models import DailyBar
 from app.database.domain_tables import (
     DomainEventTable,
@@ -34,7 +34,6 @@ from app.domain.thesis_models import (
     ThesisCondition,
 )
 from app.services.thesis_monitoring_service import ThesisMonitoringService
-
 
 _RUN_INTEGRATION = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -123,7 +122,7 @@ class ThesisMonitoringFlowIntegrationTests(
             kind=ConditionKind.RISK,
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
             operator=ComparisonOperator.LESS_THAN_OR_EQUAL,
-            threshold=Decimal("-5"),
+            threshold=Decimal(-5),
             created_at=_NOW,
             updated_at=_NOW,
         )

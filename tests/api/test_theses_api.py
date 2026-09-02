@@ -1,7 +1,7 @@
+import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
-import unittest
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -21,7 +21,6 @@ from app.services.thesis_monitoring_service import (
     ThesisMonitoringResult,
     ThesisMonitoringService,
 )
-
 
 _USER_ID = uuid4()
 _TOKEN = "test-token-with-at-least-thirty-two-characters"
@@ -217,7 +216,7 @@ class ThesesApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(captured), 1)
         self.assertEqual(captured[0].user_id, _USER_ID)
         self.assertEqual(captured[0].thesis_id, thesis_id)
-        self.assertEqual(captured[0].threshold, Decimal("-5"))
+        self.assertEqual(captured[0].threshold, Decimal(-5))
         self.assertEqual(
             response.headers.get("location"),
             (

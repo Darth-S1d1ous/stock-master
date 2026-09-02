@@ -4,6 +4,7 @@ import re
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
+from typing import Self
 
 import yfinance as yf
 from pydantic import ValidationError
@@ -11,7 +12,6 @@ from pydantic import ValidationError
 from app.data_sources.base import OutputSize
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar, PriceAdjustment
-
 
 _SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 
@@ -23,7 +23,7 @@ class YahooFinanceError(Exception):
 class YahooFinanceDataSource:
     """Fetch Yahoo Finance daily bars and fundamentals through yfinance."""
 
-    async def __aenter__(self) -> "YahooFinanceDataSource":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(

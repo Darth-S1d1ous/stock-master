@@ -25,6 +25,7 @@ from app.domain.thesis_models import (
     ThesisStatus,
 )
 
+
 class MarketDataSource(StrEnum):
     """Market-data providers supported by the public API."""
 

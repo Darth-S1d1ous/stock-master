@@ -1,7 +1,7 @@
+import hmac
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import lru_cache
-import hmac
 from typing import Annotated, ClassVar
 from uuid import UUID
 
@@ -15,6 +15,7 @@ from app.database.repositories import StockDataRepository
 from app.database.session import AsyncSessionFactory
 from app.database.thesis_repositories import ThesisRepository
 from app.services.thesis_monitoring_service import ThesisMonitoringService
+
 
 class ApiSecuritySettings(BaseSettings):
     """Authentication settings for the single-user MVP API."""
@@ -83,9 +84,8 @@ async def get_database_session() -> AsyncIterator[AsyncSession]:
     exception escapes the route handler.
     """
 
-    async with AsyncSessionFactory() as session:
-        async with session.begin():
-            yield session
+    async with AsyncSessionFactory() as session, session.begin():
+        yield session
 
 def get_stock_data_repository(
     session: Annotated[AsyncSession, Depends(get_database_session)]

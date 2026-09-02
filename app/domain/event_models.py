@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.domain.thesis_models import ComparisonOperator, MetricCode
 
+
 class EventSeverity(StrEnum):
     """Severity of an event."""
 

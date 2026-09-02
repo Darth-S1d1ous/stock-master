@@ -1,7 +1,7 @@
+import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, cast
-import unittest
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -83,7 +83,7 @@ class EventsApiTests(unittest.IsolatedAsyncioTestCase):
             evidence_type=EvidenceType.METRIC_OBSERVATION,
             source="alpha_vantage",
             metric=MetricCode.DAILY_PRICE_CHANGE_PERCENT,
-            observed_value=Decimal("-6"),
+            observed_value=Decimal(-6),
             description="Observed daily change.",
             data_as_of=event.occurred_on,
             observed_at=_NOW,

@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+
 class ThesisStatus(StrEnum):
     ACTIVE = "active"
     CHALLENGED = "challenged"

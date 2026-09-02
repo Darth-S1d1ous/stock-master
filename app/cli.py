@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-from dataclasses import asdict
-from datetime import date, datetime
 import json
 import sys
+from dataclasses import asdict
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -108,7 +108,7 @@ def main() -> int:
             error=True,
         )
         return EXIT_CONFIGURATION_ERROR
-    except Exception:
+    except Exception:  # noqa: BLE001  # 顶层入口：将任何未预期异常映射为稳定退出码
         _emit(
             {"code": "ingestion_failed", "message": "The ingestion run could not be started."},
             error=True,

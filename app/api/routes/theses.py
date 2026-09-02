@@ -3,7 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.dependencies import CurrentUser, ThesisMonitoringServiceDependency, ThesisRepositoryDependency
+from app.api.dependencies import (
+    CurrentUser,
+    ThesisMonitoringServiceDependency,
+    ThesisRepositoryDependency,
+)
 from app.api.schemas import (
     CreateInvestmentThesisRequest,
     CreateThesisConditionRequest,
@@ -24,11 +28,7 @@ from app.database.thesis_repositories import (
 from app.domain.metric_calculator import MetricCalculationError
 from app.domain.metric_registry import MetricRegistryError
 from app.domain.rule_engine import RuleEvaluationError
-from app.domain.thesis_models import (
-    InvestmentThesis,
-    ThesisCondition,
-    ThesisStatus
-)
+from app.domain.thesis_models import InvestmentThesis, ThesisCondition, ThesisStatus
 from app.services.thesis_monitoring_service import (
     InvalidMonitoringSourceError,
     MonitoringClockError,
