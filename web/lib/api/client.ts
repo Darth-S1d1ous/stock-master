@@ -48,7 +48,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       const body: unknown = await response.json().catch(() => null);
       const envelope = isErrorEnvelope(body)
         ? body
-        : { code: "upstream_error", message: "后端服务未能完成请求。" };
+        : { code: "upstream_error", message: "The backend service could not complete the request." };
       console.error(JSON.stringify({
         level: "error",
         request_id: requestId,

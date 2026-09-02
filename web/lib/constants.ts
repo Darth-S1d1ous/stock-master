@@ -1,23 +1,23 @@
 import type { ComparisonOperator, ConditionKind, EventSeverity, EventStatus, FeedbackType, MetricCode, ThesisStatus } from "@/types/domain";
 
 export const thesisStatusLabels: Record<ThesisStatus, string> = {
-  active: "监控中",
-  challenged: "受挑战",
-  invalidated: "已失效",
-  archived: "已归档",
+  active: "Active",
+  challenged: "Challenged",
+  invalidated: "Invalidated",
+  archived: "Archived",
 };
 export const conditionKindLabels: Record<ConditionKind, string> = {
-  support: "支持信号",
-  risk: "风险信号",
-  invalidation: "失效条件",
+  support: "Support signal",
+  risk: "Risk signal",
+  invalidation: "Invalidation condition",
 };
 export const metricLabels: Record<MetricCode, string> = {
-  daily_price_change_percent: "单日价格变动",
-  volume_ratio_20d: "20 日成交量比",
-  pe_ratio: "市盈率",
-  pe_ratio_change_percent: "市盈率变动",
-  price_to_book_ratio: "市净率",
-  price_to_book_change_percent: "市净率变动",
+  daily_price_change_percent: "Daily price change",
+  volume_ratio_20d: "20-day volume ratio",
+  pe_ratio: "P/E ratio",
+  pe_ratio_change_percent: "P/E ratio change",
+  price_to_book_ratio: "Price-to-book ratio",
+  price_to_book_change_percent: "Price-to-book ratio change",
   ebitda: "EBITDA",
 };
 export const operatorLabels: Record<ComparisonOperator, string> = {
@@ -26,16 +26,16 @@ export const operatorLabels: Record<ComparisonOperator, string> = {
   less_than: "<",
   less_than_or_equal: "≤",
 };
-export const severityLabels: Record<EventSeverity, string> = { info: "提示", warning: "警告", critical: "严重" };
-export const eventStatusLabels: Record<EventStatus, string> = { open: "待处理", acknowledged: "已确认", resolved: "已解决", dismissed: "已忽略" };
+export const severityLabels: Record<EventSeverity, string> = { info: "Info", warning: "Warning", critical: "Critical" };
+export const eventStatusLabels: Record<EventStatus, string> = { open: "Open", acknowledged: "Acknowledged", resolved: "Resolved", dismissed: "Dismissed" };
 export const feedbackLabels: Record<FeedbackType, string> = {
-  useful: "有价值",
-  not_useful: "价值有限",
-  false_positive: "误报",
-  confirmed: "已确认",
-  ignored: "忽略",
-  duplicate: "重复",
-  not_relevant: "不相关",
+  useful: "Useful",
+  not_useful: "Not useful",
+  false_positive: "False positive",
+  confirmed: "Confirmed",
+  ignored: "Ignored",
+  duplicate: "Duplicate",
+  not_relevant: "Not relevant",
 };
 
 export const metricOptions = Object.entries(metricLabels) as [MetricCode, string][];

@@ -172,7 +172,7 @@ class YahooFinanceDataSource:
     @staticmethod
     def _validate_output_size(output_size: str) -> None:
         if output_size not in ("compact", "full"):
-            raise ValueError("output_size must be 'compact' 或 'full'")
+            raise ValueError("output_size must be 'compact' or 'full'")
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:

@@ -81,5 +81,5 @@ class StockIngestionService:
             raise ValueError(
                 "The fundamentals symbol does not match the requested symbol: "
                 f"requested {requested_symbol}，"
-                f"返回 {fundamentals_symbol}"
+                f"returned {fundamentals_symbol}"
             )

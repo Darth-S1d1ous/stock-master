@@ -5,7 +5,7 @@ type BadgeValue = ThesisStatus | ConditionKind | EventSeverity | EventStatus;
 
 export function StatusBadge({ value }: { value: BadgeValue }) {
   const labels: Partial<Record<BadgeValue, string>> = {
-    ...thesisStatusLabels,
+    ...thesisStatusLabels, // ... is the spread operator, used to unfold the object
     ...conditionKindLabels,
     ...severityLabels,
     ...eventStatusLabels,
