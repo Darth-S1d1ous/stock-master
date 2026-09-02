@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint app components lib types middleware.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "jose": "^6.0.0",
