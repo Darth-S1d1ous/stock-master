@@ -1,31 +1,31 @@
 flowchart LR
-    U[用户浏览器]
+    U[User's Browser]
 
-    subgraph WEB["Web 前端 / BFF（新增 web/）"]
-        MW[访问中间件<br/>会话校验 / CSRF / 安全头 / Request ID]
-        UI[Next.js 页面<br/>Server Components + 少量 Client Components]
-        BFF[BFF Route Handlers<br/>参数校验 / API 聚合 / 错误转换]
-        CLIENT[FastAPI Client<br/>Bearer 注入 / 超时 / Trace ID]
+    subgraph WEB["Web Frontend / BFF"]
+        MW[access middlewares<br/>session authentication / CSRF / security headers / Request ID]
+        UI[Next.js page<br/>Server Components + some Client Components]
+        BFF[BFF Route Handlers<br/>parameter validation / API aggregation / Error Transformation]
+        CLIENT[FastAPI Client<br/>Bearer Injection / Time Out / Trace ID]
     end
 
-    subgraph BACKEND["现有 FastAPI 后端（尽量不改）"]
+    subgraph BACKEND["Current FastAPI Backend (Fixed temporarily)"]
         API["/api/v1"]
-        AUTH[Bearer Token 认证]
+        AUTH[Bearer Token Authentication]
         THESIS[Thesis API]
         EVENT[Event API]
-        MONITOR[确定性监控服务]
+        MONITOR[Deterministic Monitoring Service]
         REPO[SQLAlchemy Repository]
     end
 
     DB[(PostgreSQL)]
     PROVIDERS[Alpha Vantage<br/>Finnhub<br/>Yahoo Finance]
-    INGEST[现有 CLI / Cron 采集]
+    INGEST[CLI / Cron Sampling]
 
-    U -->|同源 HTTPS| MW
+    U -->|HTTPS| MW
     MW --> UI
     UI --> BFF
     BFF --> CLIENT
-    CLIENT -->|服务端 Bearer Token| API
+    CLIENT -->|Server-side Bearer Token| API
 
     API --> AUTH
     AUTH --> THESIS
