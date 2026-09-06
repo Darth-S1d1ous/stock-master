@@ -35,6 +35,7 @@ AsyncSessionFactory = async_sessionmaker(
     expire_on_commit=False,
 )
 
+# deprecated, refer to app/api/dependencies.py
 async def get_database_session() -> AsyncIterator[AsyncSession]:
     """
     create a database session.

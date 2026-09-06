@@ -6,9 +6,14 @@ from app.database.agent_tables import (
     AgentMessageTable,
     AgentSessionTable,
 )
-# Register domain tables to the base metadata
-from app.database.domain_tables import InvestmentThesisTable, ThesisConditionTable
 from app.database.base import Base
+
+# Register domain tables on the shared metadata so FK targets resolve.
+from app.database.domain_tables import (  # noqa: F401
+    InvestmentThesisTable,
+    ThesisConditionTable,
+)
+
 
 def _constraint_names(table) -> set[str]:
     return {constraint.name for constraint in table.constraints}

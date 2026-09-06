@@ -1,5 +1,5 @@
 import unittest
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -13,6 +13,7 @@ from app.domain.agent_models import (
     AgentSession,
     AgentSessionStatus,
 )
+
 
 def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
@@ -33,12 +34,12 @@ class AgentSessionTests(unittest.TestCase):
                 user_id=uuid4(),
                 thesis_id=uuid4(),
                 symbol="AAPL",
-                created_at=datetime.now(),
+                created_at=datetime.now(),  # noqa: DTZ005
             )
 
     def test_rejects_updated_at_before_created_at(self) -> None:
-        created = datetime(2026, 1, 2, tzinfo=timezone.utc)
-        updated = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 2, tzinfo=UTC)
+        updated = datetime(2026, 1, 1, tzinfo=UTC)
         with self.assertRaises(ValidationError):
             AgentSession(
                 user_id=uuid4(),

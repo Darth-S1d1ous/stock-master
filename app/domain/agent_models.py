@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 
 class AgentSessionStatus(StrEnum):
     OPEN = "open"
@@ -84,9 +85,10 @@ class AgentMessage(BaseModel):
             return self
         if self.tool_name is not None or self.tool_call_id is not None:
             raise ValueError("tool_name and tool_call_id are only valid on tool messages")
-        if self.role is not AgentMessageRole.ASSISTANT:
-            if self.model is not None or self.prompt_version is not None:
-                raise ValueError("model and prompt_version are only valid on assistant messages")
+        if self.role is not AgentMessageRole.ASSISTANT and (
+            self.model is not None or self.prompt_version is not None
+        ):
+            raise ValueError("model and prompt_version are only valid on assistant messages")
         return self
 
 class AgentMemory(BaseModel):

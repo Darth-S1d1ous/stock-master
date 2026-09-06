@@ -1,5 +1,5 @@
 from datetime import datetime
-from uuid import UUID 
+from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
@@ -8,7 +8,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
     UniqueConstraint,
     func,
     text,
@@ -17,6 +16,7 @@ from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
+
 
 class AgentSessionTable(Base):
     """Stores one condition-authoring session for a saved thesis."""
@@ -46,6 +46,11 @@ class AgentSessionTable(Base):
             "user_id",
             "symbol",
         ),
+        # request A: get_open_session → 没有
+        # request B: get_open_session → 没有    A hasn't committed yet
+        # request A: INSERT open session
+        # request B: INSERT open session       ← app layer think it can insert
+        # raise IntegrityError
         Index(
             "uq_agent_sessions_one_open_per_thesis",
             "user_id",

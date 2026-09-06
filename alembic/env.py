@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.database.tables
 import app.database.domain_tables
+import app.database.agent_tables
 from app.database.base import Base
 from app.database.settings import get_database_settings
 
