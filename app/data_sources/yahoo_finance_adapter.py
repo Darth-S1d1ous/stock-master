@@ -3,13 +3,11 @@ import math
 import re
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
-from types import TracebackType
-from typing import Self
 
 import yfinance as yf
 from pydantic import ValidationError
 
-from app.data_sources.base import OutputSize
+from app.data_sources.base import OutputSize, StockDataSource
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar, PriceAdjustment
 
@@ -20,19 +18,8 @@ class YahooFinanceError(Exception):
     """Yahoo Finance data source error."""
 
 
-class YahooFinanceDataSource:
-    """Fetch Yahoo Finance daily bars and fundamentals through yfinance."""
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        return None
+class YahooFinanceAdapter(StockDataSource):
+    """Adapter that maps the yfinance library onto ``StockDataSource``."""
 
     async def get_daily_bars(
         self,
@@ -88,11 +75,11 @@ class YahooFinanceDataSource:
         for timestamp, row in history.iterrows():
             try:
                 trading_date = date.fromisoformat(str(timestamp)[:10])
-                open_price = YahooFinanceDataSource._to_decimal(row["Open"])
-                high_price = YahooFinanceDataSource._to_decimal(row["High"])
-                low_price = YahooFinanceDataSource._to_decimal(row["Low"])
-                close_price = YahooFinanceDataSource._to_decimal(row["Close"])
-                volume = YahooFinanceDataSource._to_int(row["Volume"])
+                open_price = YahooFinanceAdapter._to_decimal(row["Open"])
+                high_price = YahooFinanceAdapter._to_decimal(row["High"])
+                low_price = YahooFinanceAdapter._to_decimal(row["Low"])
+                close_price = YahooFinanceAdapter._to_decimal(row["Close"])
+                volume = YahooFinanceAdapter._to_int(row["Volume"])
 
                 bars.append(
                     DailyBar(
@@ -142,18 +129,18 @@ class YahooFinanceDataSource:
         try:
             return CompanyFundamentals(
                 symbol=symbol,
-                latest_quarter=YahooFinanceDataSource._to_optional_date(
+                latest_quarter=YahooFinanceAdapter._to_optional_date(
                     info.get("mostRecentQuarter")
                 ),
-                pe_ratio=YahooFinanceDataSource._to_optional_decimal(
+                pe_ratio=YahooFinanceAdapter._to_optional_decimal(
                     info.get("trailingPE")
                 ),
                 price_to_book_ratio=(
-                    YahooFinanceDataSource._to_optional_decimal(
+                    YahooFinanceAdapter._to_optional_decimal(
                         info.get("priceToBook")
                     )
                 ),
-                ebitda=YahooFinanceDataSource._to_optional_decimal(
+                ebitda=YahooFinanceAdapter._to_optional_decimal(
                     info.get("ebitda")
                 ),
                 currency=str(
@@ -183,7 +170,7 @@ class YahooFinanceDataSource:
 
     @staticmethod
     def _to_decimal(value: object) -> Decimal:
-        parsed = YahooFinanceDataSource._to_optional_decimal(value)
+        parsed = YahooFinanceAdapter._to_optional_decimal(value)
         if parsed is None:
             raise ValueError("Price cannot be empty")
         return parsed
@@ -202,7 +189,7 @@ class YahooFinanceDataSource:
 
     @staticmethod
     def _to_int(value: object) -> int:
-        parsed = YahooFinanceDataSource._to_optional_decimal(value)
+        parsed = YahooFinanceAdapter._to_optional_decimal(value)
         if parsed is None or parsed < 0 or parsed != parsed.to_integral_value():
             raise ValueError(f"Invalid volume: {value!r}")
         return int(parsed)

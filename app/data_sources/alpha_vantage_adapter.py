@@ -8,14 +8,14 @@ from app.data_sources.alpha_vantage_fundamental_parser import (
     parse_alpha_vantage_company_overview,
 )
 from app.data_sources.alpha_vantage_parser import parse_alpha_vantage_daily
-from app.data_sources.base import OutputSize
+from app.data_sources.base import OutputSize, StockDataSource
 from app.data_sources.fundamental_models import CompanyFundamentals
 from app.data_sources.models import DailyBar
 from app.data_sources.settings import DataSourceSettings
 
 
-class AlphaVantageDataSource:
-    """ Provides access to Alpha Vantage data source """
+class AlphaVantageAdapter(StockDataSource):
+    """Adapter that maps the Alpha Vantage HTTP client onto ``StockDataSource``."""
 
     def __init__(
         self,
@@ -26,8 +26,7 @@ class AlphaVantageDataSource:
             settings=settings,
             http_client=http_client,
         )
-    
-    """ wait for client to be initialized first """
+
     async def __aenter__(self) -> Self:
         await self._client.__aenter__()
         return self
@@ -40,14 +39,17 @@ class AlphaVantageDataSource:
     ) -> None:
         await self._client.__aexit__(exc_type, exc_value, traceback)
 
-    async def get_daily_bars(self, symbol: str, output_size: OutputSize = "compact")-> list[DailyBar]:
-
-        payload = await self._client.fetch_daily_raw(symbol=symbol, output_size=output_size)
-
+    async def get_daily_bars(
+        self,
+        symbol: str,
+        output_size: OutputSize = "compact",
+    ) -> list[DailyBar]:
+        payload = await self._client.fetch_daily_raw(
+            symbol=symbol,
+            output_size=output_size,
+        )
         return parse_alpha_vantage_daily(payload)
 
     async def get_company_fundamentals(self, symbol: str) -> CompanyFundamentals:
-
         payload = await self._client.fetch_company_overview_raw(symbol=symbol)
-
         return parse_alpha_vantage_company_overview(payload)

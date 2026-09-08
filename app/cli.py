@@ -26,10 +26,12 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_common_arguments(command: argparse.ArgumentParser) -> None:
+        from app.data_sources.provider_factory import SUPPORTED_PROVIDERS
+
         command.add_argument(
             "--provider",
             required=True,
-            choices=("alpha_vantage", "finnhub", "yahoo_finance"),
+            choices=SUPPORTED_PROVIDERS,
         )
         command.add_argument("--output-size", choices=("compact", "full"), default="compact")
         command.add_argument("--timeout-seconds", type=float, default=45.0)
