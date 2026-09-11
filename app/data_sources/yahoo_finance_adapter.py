@@ -56,7 +56,7 @@ class YahooFinanceAdapter(StockDataSource):
                 interval="1d",
                 auto_adjust=False,
                 actions=False,
-                repair=True,
+                repair=False, # handle yfinance github issue #2688
                 raise_errors=True,
             )
         except Exception as exc:

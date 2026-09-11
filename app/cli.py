@@ -51,9 +51,12 @@ def _parser() -> argparse.ArgumentParser:
     add_common_arguments(refresh_active)
     return parser
 
-
+# isinstance(value, (datetime, date, UUID)) return true if value is ONE OF the types
+# so uuid should be handled separately
 def _json_default(value: object) -> str:
-    if isinstance(value, (datetime, date, UUID)):
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (datetime, date)):
         return value.isoformat()
     raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
