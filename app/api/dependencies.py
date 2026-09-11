@@ -11,6 +11,15 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.context import AgentContextAssembler
+from app.agents.llm import (
+    AgentLlmConfigError,
+    AgentLlmError,
+    OpenAICompatibleLlmClient,
+)
+from app.agents.orchestrator import ConditionAuthorOrchestrator
+from app.agents.tools import ConditionAuthorTools
+from app.database.agent_repositories import AgentRepository
 from app.database.repositories import StockDataRepository
 from app.database.session import AsyncSessionFactory
 from app.database.thesis_repositories import ThesisRepository
@@ -112,6 +121,46 @@ def get_thesis_monitoring_service(
         thesis_repo=thesis_repository,
     )
 
+def get_agent_repository(
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> AgentRepository:
+    """Build the agent repository for the current transaction."""
+
+    return AgentRepository(session)
+
+async def get_agent_llm_client() -> AsyncIterator[OpenAICompatibleLlmClient]:
+    """Open one allowlisted LLM HTTP client for this request."""
+
+    try:
+        client = OpenAICompatibleLlmClient()
+    except (AgentLlmConfigError, AgentLlmError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "agent_llm_unavailable",
+                "message": (
+                    "The condition-authoring agent is temporarily unavailable."
+                ),
+            },
+        ) from None
+
+    async with client:
+        yield client
+
+def get_condition_author_orchestrator(
+    agents: Annotated[AgentRepository, Depends(get_agent_repository)],
+    theses: Annotated[ThesisRepository, Depends(get_thesis_repository)],
+    llm: Annotated[OpenAICompatibleLlmClient, Depends(get_agent_llm_client)],
+) -> ConditionAuthorOrchestrator:
+    """Assemble the tool loop against the request-scoped session."""
+
+    return ConditionAuthorOrchestrator(
+        assembler=AgentContextAssembler(theses=theses, agents=agents),
+        tools=ConditionAuthorTools(theses=theses, agents=agents),
+        llm=llm,
+        agents=agents,
+    )
+
 def _authentication_error() -> HTTPException:
     """Return a generic authentication failure without leaking details."""
 
@@ -125,6 +174,10 @@ def _authentication_error() -> HTTPException:
             "WWW-Authenticate": "Bearer",
         },
     )
+
+# ------------------ FastAPI dependencies ------------------
+# these types are used as parameters in the FastAPI route handlers. 
+# FastAPI will not parse them as query parameters or request bodies.
 
 CurrentUser = Annotated[
     AuthenticatedUser,
@@ -149,4 +202,14 @@ ThesisRepositoryDependency = Annotated[
 ThesisMonitoringServiceDependency = Annotated[
     ThesisMonitoringService,
     Depends(get_thesis_monitoring_service),
+]
+
+AgentRepositoryDependency = Annotated[
+    AgentRepository,
+    Depends(get_agent_repository),
+]
+
+ConditionAuthorOrchestratorDependency = Annotated[
+    ConditionAuthorOrchestrator,
+    Depends(get_condition_author_orchestrator),
 ]

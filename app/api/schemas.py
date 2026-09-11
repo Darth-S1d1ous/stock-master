@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from app.data_sources.models import PriceAdjustment
+from app.domain.agent_models import AgentMessageRole, AgentSessionStatus
 from app.domain.event_models import (
     EventSeverity,
     EventStatus,
@@ -327,6 +328,50 @@ class ThesisMonitoringResponse(ApiResponse):
     evaluation_count: int = Field(ge=0)
     matched_count: int = Field(ge=0)
     event_count: int = Field(ge=0)
+
+
+class AgentChatRequest(ApiRequest):
+    """Body for one user turn in an open agent session."""
+
+    message: str = Field(
+        min_length=1,
+        max_length=20000,
+        examples=["Add a risk rule for a 5% daily drop."],
+    )
+
+
+class AgentSessionResponse(ApiResponse):
+    """Public representation of one condition-authoring session."""
+
+    id: UUID
+    thesis_id: UUID
+    symbol: str
+    status: AgentSessionStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentMessageResponse(ApiResponse):
+    """One persisted turn. Tool payloads are opaque strings."""
+
+    id: UUID
+    session_id: UUID
+    role: AgentMessageRole
+    content: str
+    tool_name: str | None
+    tool_call_id: str | None
+    model: str | None
+    prompt_version: str | None
+    created_at: datetime
+
+
+class AgentTurnResponse(ApiResponse):
+    """Outcome of one generate or chat call after the tool loop finishes."""
+
+    assistant_text: str = Field(min_length=1, max_length=20000)
+    round_count: int = Field(ge=1)
+    stop_reason: str = Field(pattern=r"^(completed|max_rounds)$")
+    session_id: UUID
 
 
 class ErrorResponse(ApiResponse):
