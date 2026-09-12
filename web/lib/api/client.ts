@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { ApiError, type ErrorEnvelope } from "@/lib/errors";
 
+// current env config file is .env.local
 function backendConfig(): { baseUrl: string; token: string } {
   const baseUrl = process.env.BACKEND_API_URL;
   const token = process.env.BACKEND_API_TOKEN;
@@ -21,8 +22,11 @@ function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   return typeof candidate.code === "string" && typeof candidate.message === "string";
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+type ApiRequestInit = RequestInit & { timeoutMs?: number };
+
+export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
   if (!path.startsWith("/api/v1/")) throw new Error("Backend path is not allowed");
+  const { timeoutMs = 12_000, ...requestInit } = init;
   const { baseUrl, token } = backendConfig();
   const incomingHeaders = await headers();
   const requestId = incomingHeaders.get("x-request-id") ?? crypto.randomUUID();
@@ -31,16 +35,16 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      ...init,
+      ...requestInit,
       cache: "no-store",
       redirect: "error",
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         accept: "application/json",
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "x-request-id": requestId,
-        ...init.headers,
+        ...requestInit.headers,
       },
     });
 

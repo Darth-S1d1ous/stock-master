@@ -25,6 +25,9 @@ export type FeedbackType =
   | "not_relevant";
 export type MarketDataSource = "alpha_vantage" | "finnhub" | "yahoo_finance";
 export type PriceAdjustment = "raw" | "split_adjusted" | "total_return";
+export type AgentSessionStatus = "open" | "closed";
+export type AgentMessageRole = "system" | "user" | "assistant" | "tool";
+export type AgentStopReason = "completed" | "max_rounds";
 
 export interface InvestmentThesis {
   id: string;
@@ -139,4 +142,32 @@ export interface ThesisMonitoringResult {
   evaluation_count: number;
   matched_count: number;
   event_count: number;
+}
+
+export interface AgentSession {
+  id: string;
+  thesis_id: string;
+  symbol: string;
+  status: AgentSessionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentMessage {
+  id: string;
+  session_id: string;
+  role: AgentMessageRole;
+  content: string;
+  tool_name: string | null;
+  tool_call_id: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  created_at: string;
+}
+
+export interface AgentTurnResult {
+  assistant_text: string;
+  round_count: number;
+  stop_reason: AgentStopReason;
+  session_id: string;
 }
